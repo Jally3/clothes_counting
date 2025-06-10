@@ -97,7 +97,7 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                       child: ListTile(
                         title: Text('$productCode - $style ($productType)'),
-                        trailing: Text('Total Qty: $totalQuantity', style: Theme.of(context).textTheme.titleMedium),
+                        trailing: Text('总数 : $totalQuantity', style: Theme.of(context).textTheme.titleMedium),
                       ),
                     );
                   },

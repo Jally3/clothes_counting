@@ -61,8 +61,8 @@ class Product {
   Product copy({int? id}) {
     return Product(
       id: id ?? this.id,
-      type: this.type,
-      styleCode: this.styleCode,
+      type: type,
+      styleCode: styleCode,
     );
   }
 }

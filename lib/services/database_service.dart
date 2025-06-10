@@ -29,23 +29,23 @@ class DatabaseService {
     // const realType = 'REAL NOT NULL'; // 如果需要浮点数
 
     await db.execute('''
-CREATE TABLE products (
-  id $idType,
-  productType $textType,
-  productCode $textType UNIQUE,
-  style $textType
-)
-''');
+      CREATE TABLE products (
+        id $idType,
+        productType $textType,
+        productCode $textType UNIQUE,
+        style $textType
+      )
+      ''');
 
     await db.execute('''
-CREATE TABLE production_records (
-  id $idType,
-  productId INTEGER NOT NULL,
-  date $textType,
-  quantity $integerType,
-  FOREIGN KEY (productId) REFERENCES products (id)
-)
-''');
+      CREATE TABLE production_records (
+        id $idType,
+        productId INTEGER NOT NULL,
+        date $textType,
+        quantity $integerType,
+        FOREIGN KEY (productId) REFERENCES products (id)
+      )
+      ''');
   }
 
   // 产品相关的操作

@@ -49,11 +49,11 @@ class ProductionRecord {
   ProductionRecord copy({int? id}) {
     return ProductionRecord(
       id: id ?? this.id,
-      productId: this.productId,
-      productType: this.productType,
-      productStyleCode: this.productStyleCode,
-      quantity: this.quantity,
-      date: this.date,
+      productId: productId,
+      productType: productType,
+      productStyleCode: productStyleCode,
+      quantity: quantity,
+      date: date,
     );
   }
 }

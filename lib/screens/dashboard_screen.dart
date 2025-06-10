@@ -15,7 +15,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final DatabaseService _databaseService = DatabaseService.instance;
   late Future<List<ProductionRecord>> _todayRecords;
-  DateTime _selectedDate = DateTime.now(); // 添加这一行来跟踪选择的日期
+   DateTime selectedDate = DateTime.now(); // 添加这一行来跟踪选择的日期
 
   @override
   void initState() {
@@ -26,7 +26,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _loadTodayRecords() {
     setState(() {
       // 使用 _selectedDate 来加载记录
-      _todayRecords = _databaseService.getProductionRecordsByDate(_selectedDate);
+      _todayRecords = _databaseService.getProductionRecordsByDate(selectedDate);
     });
   }
 
@@ -54,7 +54,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Text(
-              'Summary for: ${DateFormat.yMMMd().format(_selectedDate)}',
+              'Summary for: ${DateFormat.yMMMd().format(selectedDate)}',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
           ),
@@ -78,21 +78,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   itemCount: records.length,
                   itemBuilder: (context, index) {
                     final record = records[index];
-                    // 直接从 record 对象中获取数据
-                    // 注意：您可能需要根据 ProductionRecord 模型的实际字段调整这里的代码
-                    // 例如，如果 ProductionRecord 有一个 product 字段，而 product 有 code 和 style 字段
-                    // 您可能需要异步加载产品信息或在 ProductionRecord 中存储产品代码和款式
-                    // 这里假设 ProductionRecord 直接包含所需信息或可以通过同步方式获取
-                    // 为了简化，我们先假设 ProductionRecord 有一个 productName 字段
-                    // 您需要根据您的模型调整
-                    String productName = record.productStyleCode ?? 'N/A'; // 假设的字段
+            
+                    String productName = record.productStyleCode ?? ''; // 假设的字段
                     int quantity = record.quantity;
 
                     return Card(
                       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                       child: ListTile(
                         title: Text(productName), // 使用 productName
-                        trailing: Text('Qty: $quantity', style: Theme.of(context).textTheme.titleMedium),
+                        trailing: Text('数量: $quantity', style: Theme.of(context).textTheme.titleMedium),
                       ),
                     );
                   },
