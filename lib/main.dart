@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';  // 添加这个基础导入
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 // 引入我们刚刚创建的 dashboard_screen.dart
 import 'screens/dashboard_screen.dart'; 
@@ -18,6 +19,17 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
+      // 添加本地化配置
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('zh', 'CN'), // 中文简体
+        Locale('en', 'US'), // 英文
+      ],
+      locale: const Locale('zh', 'CN'), // 设置默认语言为中文
       // 将 home 从 PlaceholderHomeScreen 修改为 DashboardScreen
       home: const DashboardScreen(), 
     );

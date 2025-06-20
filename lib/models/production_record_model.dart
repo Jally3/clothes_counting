@@ -4,7 +4,7 @@ class ProductionRecord {
   final int? id; // 记录的唯一ID，通常由数据库生成，改为int?
   final int productId; // 关联的产品ID，改为int
   final ProductType productType; // 产品类型，冗余存储方便查询，或从Product获取
-  final String productStyleCode; // 产品编号/款式，冗余存储方便查询
+  final String productCode; // 产品编号/款式，冗余存储方便查询
   final int quantity; // 完成数量
   final DateTime date; // 记录日期
   // 可以添加其他记录相关属性，如记录人、班次等
@@ -13,21 +13,19 @@ class ProductionRecord {
     this.id, // id现在是可选的
     required this.productId,
     required this.productType,
-    required this.productStyleCode,
+    required this.productCode,
     required this.quantity,
     required this.date,
   });
 
   // 便捷获取产品类型的显示名称
-  String get productTypeDisplayName => productTypeDisplayNames[productType] ?? '未知';
+  String get productTypeDisplayName => productTypeChDisplayNames[productType] ?? '未知';
 
   // 将ProductionRecord对象转换为Map，以便存入数据库
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'productId': productId,
-      'productType': productType.toString().split('.').last, // 将枚举转换为字符串存储
-      'productStyleCode': productStyleCode,
       'quantity': quantity,
       'date': date.toIso8601String(), // 将DateTime转换为ISO 8601字符串存储
     };
@@ -39,7 +37,7 @@ class ProductionRecord {
       id: map['id'] as int?,
       productId: map['productId'] as int,
       productType: productTypeFromString(map['productType'] as String),
-      productStyleCode: map['productStyleCode'] as String,
+      productCode: map['productCode'] as String,
       quantity: map['quantity'] as int,
       date: DateTime.parse(map['date'] as String), // 从字符串解析DateTime
     );
@@ -51,7 +49,7 @@ class ProductionRecord {
       id: id ?? this.id,
       productId: productId,
       productType: productType,
-      productStyleCode: productStyleCode,
+      productCode: productCode,
       quantity: quantity,
       date: date,
     );

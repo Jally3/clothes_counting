@@ -9,42 +9,49 @@ enum ProductType {
 
 // 产品类型到显示名称的映射
 const Map<ProductType, String> productTypeDisplayNames = {
+  ProductType.clothes: 'clothes',
+  ProductType.pants: 'pants',
+  ProductType.dress: 'dress',
+  ProductType.hat: 'hat',
+  ProductType.unknown: 'unknown',
+};
+// 产品类型到显示名称的映射
+const Map<ProductType, String> productTypeChDisplayNames = {
   ProductType.clothes: '衣服',
   ProductType.pants: '裤子',
   ProductType.dress: '连衣裙',
   ProductType.hat: '帽子',
-  ProductType.unknown: '未知',
+  ProductType.unknown: '其他',
 };
 
 // 显示名称到产品类型的映射 (用于从字符串转换)
 ProductType productTypeFromString(String typeString) {
   return productTypeDisplayNames.entries
-      .firstWhere((entry) => entry.value == typeString, orElse: () => const MapEntry(ProductType.unknown, '未知'))
+      .firstWhere((entry) => entry.value == typeString, orElse: () => const MapEntry(ProductType.unknown, '其他'))
       .key;
 }
 
 class Product {
   final int? id; // 将id改为int?类型，因为数据库是INTEGER PRIMARY KEY AUTOINCREMENT
   final ProductType type;
-  final String styleCode; // 产品编号/款式
+  final String productCode; // 产品编号/款式
   // 可以添加其他产品相关属性，如颜色、尺码等
 
   Product({
     this.id, // id现在是可选的
     required this.type,
-    required this.styleCode,
+    required this.productCode,
   });
 
   // 便捷获取产品类型的显示名称
-  String get typeDisplayName => productTypeDisplayNames[type] ?? '未知';
+  String get typeDisplayName => productTypeChDisplayNames[type] ?? '未知';
 
   // 将Product对象转换为Map，以便存入数据库
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'productType': type.toString().split('.').last, // 将枚举转换为字符串存储
-      'productCode': styleCode, // 数据库中是productCode，这里对应styleCode
-      'style': styleCode, // 数据库中是style，这里也对应styleCode，如果需要区分，请调整
+      'productCode': productCode, // 数据库中是productCode，这里对应styleCode
     };
   }
 
@@ -53,7 +60,7 @@ class Product {
     return Product(
       id: map['id'] as int?,
       type: productTypeFromString(map['productType'] as String),
-      styleCode: map['productCode'] as String, // 从productCode字段读取
+      productCode: map['productCode'] as String, // 从productCode字段读取
     );
   }
 
@@ -62,7 +69,7 @@ class Product {
     return Product(
       id: id ?? this.id,
       type: type,
-      styleCode: styleCode,
+      productCode: productCode,
     );
   }
 }

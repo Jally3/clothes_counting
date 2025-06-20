@@ -30,12 +30,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:  # 添加这一行
+    sdk: flutter
   sqflite: ^2.3.0 
-  intl: ^0.19.0 # 添加这一行，版本号可以根据最新稳定版调整
-  path: ^1.8.3 # sqflite 通常需要 path 插件
-
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
+  intl: ^0.19.0
+  path: ^1.8.3
   cupertino_icons: ^1.0.8
 
 dev_dependencies:

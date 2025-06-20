@@ -3,42 +3,42 @@ import 'package:intl/intl.dart';
 import '../services/database_service.dart';
 import '../models/production_record_model.dart';
 import '../models/product_model.dart';
-import 'monthly_stats_screen.dart';
 import 'production_record_screen.dart';
 
-class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+class DateDetailScreen extends StatefulWidget {
+  final DateTime selectedDate;
+  
+  const DateDetailScreen({super.key, required this.selectedDate});
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  State<DateDetailScreen> createState() => _DateDetailScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DateDetailScreenState extends State<DateDetailScreen> {
   final DatabaseService _databaseService = DatabaseService.instance;
-  List<ProductionRecord> _todayRecords = [];
+  List<ProductionRecord> _records = [];
   Map<ProductType, List<ProductionRecord>> _groupedRecords = {};
   Map<ProductType, bool> _expandedStates = {};
   Map<String, bool> _productCodeExpandedStates = {};
   bool _isLoading = true;
-  DateTime selectedDate = DateTime.now();
 
   @override
   void initState() {
     super.initState();
-    _loadTodayRecords();
+    _loadRecords();
   }
 
-  Future<void> _loadTodayRecords() async {
+  Future<void> _loadRecords() async {
     setState(() {
       _isLoading = true;
     });
 
     try {
-      final records = await _databaseService.getTodayProductionRecords();
+      final records = await _databaseService.getProductionRecordsByDate(widget.selectedDate);
       _groupRecordsByType(records);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('加载今日记录失败: $e')),
+        SnackBar(content: Text('加载记录失败: $e')),
       );
     } finally {
       setState(() {
@@ -48,14 +48,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _groupRecordsByType(List<ProductionRecord> records) {
-    _todayRecords = records;
+    _records = records;
     _groupedRecords.clear();
     
-    // 按ProductType分组
     for (final record in records) {
       if (!_groupedRecords.containsKey(record.productType)) {
         _groupedRecords[record.productType] = [];
-        _expandedStates[record.productType] = false; // 默认收起
+        _expandedStates[record.productType] = false;
       }
       _groupedRecords[record.productType]!.add(record);
     }
@@ -303,7 +302,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final isExpanded = _expandedStates[productType] ?? false;
     final totalQuantity = records.fold<int>(0, (sum, record) => sum + record.quantity);
     
-    // 按产品编号分组
     final Map<String, List<ProductionRecord>> recordsByCode = {};
     for (final record in records) {
       if (!recordsByCode.containsKey(record.productCode)) {
@@ -452,12 +450,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.9),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.blue.shade200),
                       ),
                       child: Icon(
-                        isExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
-                        size: 28,
+                        isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
                         color: Colors.blue.shade600,
+                        size: 28,
                       ),
                     ),
                   ],
@@ -466,12 +463,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           if (isExpanded)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
+            Container(
+              padding: const EdgeInsets.only(top: 12, bottom: 16),
               child: Column(
-                children: recordsByCode.entries.map((entry) => 
-                  _buildProductCodeGroup(entry.key, entry.value)
-                ).toList(),
+                children: recordsByCode.entries
+                    .map((entry) => _buildProductCodeGroup(entry.key, entry.value))
+                    .toList(),
               ),
             ),
         ],
@@ -485,10 +482,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return Icons.checkroom_rounded;
       case ProductType.pants:
         return Icons.dry_cleaning_rounded;
+      case ProductType.hat:
+        return Icons.local_laundry_service_rounded;
       case ProductType.dress:
         return Icons.woman_rounded;
-      case ProductType.hat:
-        return Icons.sports_baseball_rounded;
+
+      case ProductType.unknown:
       default:
         return Icons.category_rounded;
     }
@@ -499,117 +498,72 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: const Text(
-          '生产统计助手',
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.blue.shade800,
+        title: Text(
+          '${widget.selectedDate.year}年${widget.selectedDate.month}月${widget.selectedDate.day}日详情',
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 20,
+            color: Colors.blue.shade800,
           ),
         ),
-        elevation: 0,
-        flexibleSpace: Container(
+        leading: Container(
+          margin: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.blue.shade600, Colors.indigo.shade600],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            color: Colors.white.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: IconButton(
+            icon: Icon(Icons.arrow_back_rounded, color: Colors.blue.shade700),
+            onPressed: () => Navigator.pop(context),
           ),
         ),
-        foregroundColor: Colors.white,
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.refresh_rounded),
-              onPressed: _loadTodayRecords,
-              tooltip: '刷新数据',
-            ),
-          ),
-          Container(
-            margin: const EdgeInsets.only(right: 12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.calendar_month_rounded),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const MonthlyStatsScreen(),
-                  ),
-                );
-              },
-              tooltip: '月度统计',
-            ),
-          ),
-        ],
       ),
       body: Column(
         children: [
           Container(
-            margin: const EdgeInsets.all(16.0),
-            padding: const EdgeInsets.all(24.0),
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
               gradient: LinearGradient(
-                colors: [Colors.white, Colors.blue.shade50],
+                colors: [Colors.blue.shade500, Colors.indigo.shade600],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: Colors.blue.shade200,
-                width: 1.5,
-              ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.blue.withOpacity(0.15),
+                  color: Colors.blue.withOpacity(0.3),
                   spreadRadius: 0,
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
+                  blurRadius: 15,
+                  offset: const Offset(0, 5),
                 ),
               ],
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Colors.blue.shade500, Colors.indigo.shade500],
-                        ),
+                        color: Colors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.blue.withOpacity(0.4),
-                            spreadRadius: 0,
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
                       ),
                       child: const Icon(
-                        Icons.dashboard_rounded,
+                        Icons.calendar_today_rounded,
                         color: Colors.white,
                         size: 28,
                       ),
                     ),
                     const SizedBox(width: 16),
                     Text(
-                      '今日生产概览',
+                      '生产记录详情',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 22,
-                        color: Colors.blue.shade800,
+                        color: Colors.white,
                       ),
                     ),
                   ],
@@ -631,11 +585,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          '${selectedDate.year}年${selectedDate.month}月${selectedDate.day}日',
+                          '${widget.selectedDate.year}年${widget.selectedDate.month}月${widget.selectedDate.day}日',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 18,
-                            color: Colors.blue.shade800,
+                            color: Colors.white,
                           ),
                         ),
                       ],
@@ -666,7 +620,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            '总数量: ${_todayRecords.fold<int>(0, (sum, record) => sum + record.quantity)}',
+                            '总数量: ${_records.fold<int>(0, (sum, record) => sum + record.quantity)}',
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
@@ -708,7 +662,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         const SizedBox(height: 20),
                         Text(
-                          '正在加载今日数据...',
+                          '正在加载数据...',
                           style: TextStyle(
                             color: Colors.grey.shade600,
                             fontSize: 16,
@@ -745,19 +699,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             const SizedBox(height: 24),
                             Text(
-                              '今日暂无生产记录',
+                              '该日期暂无生产记录',
                               style: TextStyle(
                                 fontSize: 20,
                                 color: Colors.grey.shade700,
                                 fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '点击右下角按钮开始记录',
-                              style: TextStyle(
-                                fontSize: 15,
-                                color: Colors.grey.shade500,
                               ),
                             ),
                           ],
@@ -790,7 +736,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               context,
               MaterialPageRoute(builder: (context) => const ProductionRecordScreen()),
             );
-            _loadTodayRecords();
+            _loadRecords();
           },
           icon: const Icon(Icons.add_rounded, size: 24),
           label: const Text(
