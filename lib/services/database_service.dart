@@ -235,7 +235,37 @@ class DatabaseService {
       ORDER BY p.productCode ASC
     ''', ['$year-$monthString']);
   }
-  // 在DatabaseService类中添加以下方法
+  // 修复后的 getRecordsByDateRange 方法
+  Future<List<ProductionRecord>> getRecordsByDateRange(DateTime startDate, DateTime endDate) async {
+    final db = await database;
+    
+    // 将日期转换为 ISO8601 字符串格式进行比较
+    final startDateString = startDate.toIso8601String();
+    final endDateString = endDate.toIso8601String();
+    
+    try {
+      final result = await db.rawQuery('''
+        SELECT 
+          pr.id,
+          pr.productId,
+          p.productType,
+          p.productCode,
+          pr.quantity,
+          pr.date,
+          pr.operatorId,
+          pr.notes
+        FROM production_records pr
+        JOIN products p ON pr.productId = p.id
+        WHERE pr.date >= ? AND pr.date <= ? AND p.isActive = 1
+        ORDER BY p.productType ASC, pr.date DESC
+      ''', [startDateString, endDateString]);
+  
+      return result.map((map) => ProductionRecord.fromMap(map)).toList();
+    } catch (e) {
+      print('查询日期范围生产记录出错: $e');
+      return [];
+    }
+  }
 
   /// 获取一个月内某个产品类型的生产总数
   Future<int> getMonthlyProductionCountByType(String productType, int year, int month) async {

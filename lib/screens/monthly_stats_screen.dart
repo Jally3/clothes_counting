@@ -280,7 +280,7 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  '${record.date.toString().substring(5, 10)}',
+                  '时间：${record.date.toString().substring(5, 10)}',
                   style: TextStyle(
                     color: Colors.grey.shade600,
                     fontSize: 11,
@@ -487,7 +487,8 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Row(
+                        Wrap(
+                          runSpacing: 10,
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

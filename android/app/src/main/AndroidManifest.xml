@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="clothes_counting"
+        android:label="辉叔计数哦"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

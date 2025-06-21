@@ -131,7 +131,7 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  '${record.date.toString().substring(11, 16)}',
+                  '时间：${record.date.toString().substring(11, 16)}',
                   style: TextStyle(
                     color: Colors.grey.shade600,
                     fontSize: 11,
@@ -379,7 +379,7 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
                             ),
                           ),
                           const SizedBox(height: 8),
-                          Row(
+                          Wrap(runSpacing: 10,
                             children: [
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -542,6 +542,7 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
               ],
             ),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
@@ -569,24 +570,18 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
                   ],
                 ),
                 const SizedBox(height: 20),
-                Row(
+                Column(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '日期',
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
+
                         const SizedBox(height: 6),
                         Text(
                           '${widget.selectedDate.year}年${widget.selectedDate.month}月${widget.selectedDate.day}日',
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 18,
                             color: Colors.white,
@@ -594,6 +589,8 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 20),
+
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                       decoration: BoxDecoration(

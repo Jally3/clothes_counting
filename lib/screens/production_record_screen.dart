@@ -5,7 +5,9 @@ import '../models/production_record_model.dart';
 import '../services/database_service.dart';
 
 class ProductionRecordScreen extends StatefulWidget {
-  const ProductionRecordScreen({super.key});
+  final String productCode ;
+  final ProductType productType ;
+  const ProductionRecordScreen({super.key,  this.productCode = '',  this.productType=ProductType.clothes});
 
   @override
   State<ProductionRecordScreen> createState() => _ProductionRecordScreenState();
@@ -14,13 +16,21 @@ class ProductionRecordScreen extends StatefulWidget {
 class _ProductionRecordScreenState extends State<ProductionRecordScreen> {
   final _formKey = GlobalKey<FormState>();
   ProductType _selectedProductType = ProductType.values.first;
-  final _productCodeController = TextEditingController();
+  final _productCodeController = TextEditingController(text: '#');
   final _quantityController = TextEditingController();
   DateTime _selectedDateTime = DateTime.now();
   bool _isLoading = false;
 
   final DatabaseService _dbService = DatabaseService.instance;
 
+  @override
+  void initState() {
+    if(widget.productCode.isNotEmpty){
+      _productCodeController.text = widget.productCode;
+    }
+   _selectedProductType = widget.productType;
+    super.initState();
+  }
   @override
   void dispose() {
     _productCodeController.dispose();
