@@ -74,14 +74,14 @@ class _ProductionRecordScreenState extends State<ProductionRecordScreen> {
 
       try {
         // 查找或创建产品
-        Product? product = await _dbService.getProductByCode(_productCodeController.text);
+        Product? product = await _dbService.getProductByCode(_productCodeController.text, _selectedProductType);
         if (product == null) {
           product = Product(
             type: _selectedProductType,
             productCode: _productCodeController.text,
           );
           product = await _dbService.createProduct(product);
-        }
+        } 
 
         final record = ProductionRecord(
           productId: product.id!,
@@ -189,6 +189,7 @@ class _ProductionRecordScreenState extends State<ProductionRecordScreen> {
                           );
                         }).toList(),
                         onChanged: (ProductType? newValue) {
+                          print(newValue);
                           setState(() {
                             _selectedProductType = newValue!;
                           });

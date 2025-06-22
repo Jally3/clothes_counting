@@ -76,7 +76,7 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
 
   Widget _buildRecordItem(ProductionRecord record) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -90,58 +90,44 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
           ),
         ],
       ),
-      child: ListTile(
-        dense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        title: Text(
-          '编号: ${record.productCode}',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 15,
-            color: Colors.blue.shade800,
+      child:  Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            '时间：${record.date.toString().substring(11, 16)}',
+            style: TextStyle(
+              color: Colors.grey.shade600,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.blue.shade50, Colors.blue.shade100],
-                  ),
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: Colors.blue.shade200),
-                ),
-                child: Text(
-                  '数量: ${record.quantity}',
-                  style: TextStyle(
-                    color: Colors.blue.shade700,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.blue.shade50, Colors.blue.shade100],
               ),
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  '时间：${record.date.toString().substring(11, 16)}',
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: Colors.blue.shade200),
+            ),
+            child: Text(
+              '数量: ${record.quantity}',
+              style: TextStyle(
+                color: Colors.blue.shade700,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -151,7 +137,7 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
     final totalQuantity = records.fold<int>(0, (sum, record) => sum + record.quantity);
     
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      margin:  const EdgeInsets.only(left: 12,right:12,bottom: 12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: LinearGradient(
@@ -220,7 +206,7 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
                           Row(
                             children: [
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: Colors.amber.shade100,
                                   borderRadius: BorderRadius.circular(12),
@@ -237,7 +223,7 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
                               ),
                               const SizedBox(width: 8),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     colors: [Colors.green.shade400, Colors.teal.shade400],
@@ -285,10 +271,10 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
           ),
           if (isExpanded)
             Container(
-              padding: const EdgeInsets.only(top: 8, bottom: 12),
+              padding: const EdgeInsets.only(top: 0, bottom: 0),
               child: Column(
                 children: records.map((record) => Padding(
-                  padding: const EdgeInsets.only(left: 8, right: 8, bottom: 6),
+                  padding: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
                   child: _buildRecordItem(record),
                 )).toList(),
               ),
@@ -340,7 +326,7 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
               borderRadius: BorderRadius.circular(20),
               onTap: () => _toggleExpanded(productType),
               child: Padding(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
                     Container(
@@ -382,7 +368,7 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
                           Wrap(runSpacing: 10,
                             children: [
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: Colors.purple.shade100,
                                   borderRadius: BorderRadius.circular(15),
@@ -399,7 +385,7 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
                               ),
                               const SizedBox(width: 8),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: Colors.orange.shade100,
                                   borderRadius: BorderRadius.circular(15),
@@ -416,7 +402,7 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
                               ),
                               const SizedBox(width: 8),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     colors: [Colors.green.shade500, Colors.teal.shade500],
@@ -464,7 +450,7 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
           ),
           if (isExpanded)
             Container(
-              padding: const EdgeInsets.only(top: 12, bottom: 16),
+              padding: const EdgeInsets.only(top: 0, bottom: 0),
               child: Column(
                 children: recordsByCode.entries
                     .map((entry) => _buildProductCodeGroup(entry.key, entry.value))
@@ -524,7 +510,7 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
         children: [
           Container(
             margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
               gradient: LinearGradient(
@@ -560,10 +546,10 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
                     ),
                     const SizedBox(width: 16),
                     Text(
-                      '生产记录详情',
-                      style: TextStyle(
+                      '${widget.selectedDate.year}年${widget.selectedDate.month}月${widget.selectedDate.day}日',
+                      style: const TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 22,
+                        fontSize: 18,
                         color: Colors.white,
                       ),
                     ),
@@ -574,25 +560,8 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-
-                        const SizedBox(height: 6),
-                        Text(
-                          '${widget.selectedDate.year}年${widget.selectedDate.month}月${widget.selectedDate.day}日',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [Colors.green.shade500, Colors.teal.shade500],
@@ -675,7 +644,7 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(20),
+                              padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(20),
@@ -696,7 +665,7 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
                             ),
                             const SizedBox(height: 24),
                             Text(
-                              '该日期暂无生产记录',
+                              '该日期暂无记录',
                               style: TextStyle(
                                 fontSize: 20,
                                 color: Colors.grey.shade700,

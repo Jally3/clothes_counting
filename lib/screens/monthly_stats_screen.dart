@@ -78,25 +78,6 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
     }
   }
 
-  Future<void> _selectMonth(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedMonth,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2101),
-      initialDatePickerMode: DatePickerMode.year,
-    );
-
-    if (picked != null) {
-      final newSelectedMonth = DateTime(picked.year, picked.month);
-      if (newSelectedMonth != _selectedMonth) {
-        setState(() {
-          _selectedMonth = newSelectedMonth;
-        });
-        _loadMonthlyRecords();
-      }
-    }
-  }
 
   Future<void> _selectMonthWithCalendar(BuildContext context) async {
     // 显示年份选择器
@@ -225,7 +206,7 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
 
   Widget _buildRecordItem(ProductionRecord record) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -239,58 +220,44 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
           ),
         ],
       ),
-      child: ListTile(
-        dense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        title: Text(
-          '编号: ${record.productCode}',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 15,
-            color: Colors.blue.shade800,
-          ),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.blue.shade50, Colors.blue.shade100],
-                  ),
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: Colors.blue.shade200),
-                ),
-                child: Text(
-                  '数量: ${record.quantity}',
-                  style: TextStyle(
-                    color: Colors.blue.shade700,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+      child:  Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              '时间：${record.date.toString().substring(5, 10)}',
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
               ),
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  '时间：${record.date.toString().substring(5, 10)}',
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
+
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.blue.shade50, Colors.blue.shade100],
+              ),
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: Colors.blue.shade200),
+            ),
+            child: Text(
+              '数量: ${record.quantity}',
+              style: TextStyle(
+                color: Colors.blue.shade700,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -301,6 +268,8 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
     
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.only(bottom: 0),
+
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -320,7 +289,7 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
             onTap: () => _toggleProductCodeExpanded(productCode),
             borderRadius: BorderRadius.circular(16),
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 16,vertical: 8),
               child: Row(
                 children: [
                   Container(
@@ -343,7 +312,7 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '产品编号: $productCode',
+                          '编号: $productCode',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
@@ -402,8 +371,11 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
             ),
           ),
           if (isExpanded)
-            Column(
-              children: records.map((record) => _buildRecordItem(record)).toList(),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: Column(
+                children: records.map((record) => _buildRecordItem(record)).toList(),
+              ),
             ),
         ],
       ),
@@ -448,7 +420,7 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
             onTap: () => _toggleExpanded(productType),
             borderRadius: BorderRadius.circular(20),
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
                   Container(
@@ -478,20 +450,44 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                      productTypeChDisplayNames[productType]??'其他' ,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                            color: Colors.blue.shade800,
-                          ),
+                        Row(
+                          children: [
+                            Text(
+                              productTypeChDisplayNames[productType]??'其他' ,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                color: Colors.blue.shade800,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [Colors.orange.shade400, Colors.orange.shade600],
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '总计: $totalQuantity',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+
+                          ],
                         ),
                         const SizedBox(height: 8),
                         Wrap(
                           runSpacing: 10,
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
                                 color: Colors.blue.shade100,
                                 borderRadius: BorderRadius.circular(12),
@@ -508,7 +504,7 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                             ),
                             const SizedBox(width: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
                                 color: Colors.green.shade100,
                                 borderRadius: BorderRadius.circular(12),
@@ -524,23 +520,6 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                               ),
                             ),
                             const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [Colors.orange.shade400, Colors.orange.shade600],
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                '总计: $totalQuantity',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
                           ],
                         ),
                       ],
@@ -557,7 +536,7 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
           ),
           if (isExpanded)
             Padding(
-              padding: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.only(bottom: 0),
               child: Column(
                 children: groupedByCode.entries
                     .map((entry) => _buildProductCodeGroup(entry.key, entry.value))
@@ -610,10 +589,11 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
               color: Colors.white.withOpacity(0.9),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: IconButton(
-              icon: Icon(Icons.calendar_today_rounded, color: Colors.blue.shade700),
+            child: TextButton(
+              child:  Text('天',style: TextStyle(fontSize: 20,fontWeight:FontWeight.bold,color:Colors.blue.shade700),),
+              style: ButtonStyle(backgroundColor: MaterialStateProperty.all(Colors.black12)),
               onPressed: () => _selectDate(context),
-              tooltip: '选择日期查看详情',
+              // tooltip: '选择日期查看详情',
             ),
           ),
           Container(
@@ -634,7 +614,7 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
         children: [
           Container(
             margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
               gradient: LinearGradient(
@@ -669,7 +649,7 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                     ),
                     const SizedBox(width: 16),
                     const Text(
-                      '月度生产概览',
+                      '月度概览',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 22,
@@ -795,7 +775,7 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                             ),
                             const SizedBox(height: 24),
                             Text(
-                              '本月暂无生产记录',
+                              '本月暂无记录',
                               style: TextStyle(
                                 fontSize: 20,
                                 color: Colors.grey.shade700,

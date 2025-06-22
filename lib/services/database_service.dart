@@ -58,11 +58,12 @@ class DatabaseService {
       CREATE TABLE products (
         id $idType,
         productType $textType,
-        productCode $textType UNIQUE,
+        productCode $textType,
         description $textNullable,
         price $realType DEFAULT 0.0,
         isActive $boolType DEFAULT 1,
-        createdAt $textType DEFAULT (datetime('now','localtime'))
+        createdAt $textType DEFAULT (datetime('now','localtime')),
+        UNIQUE(productType, productCode)
       )
     ''');
 
@@ -84,6 +85,7 @@ class DatabaseService {
     // 产品表索引
     await db.execute('CREATE INDEX idx_products_productCode ON products(productCode)');
     await db.execute('CREATE INDEX idx_products_isActive ON products(isActive)');
+    await db.execute('CREATE INDEX idx_products_productType_productCode ON products(productType, productCode)');
 
     // 生产记录表索引
     await db.execute('CREATE INDEX idx_production_records_productId ON production_records(productId)');
@@ -118,12 +120,12 @@ class DatabaseService {
     return maps.isNotEmpty ? Product.fromMap(maps.first) : null;
   }
 
-  Future<Product?> getProductByCode(String productCode) async {
+  Future<Product?> getProductByCode(String productCode, ProductType productType) async {
     final db = await instance.database;
     final maps = await db.query(
       'products',
-      where: 'productCode = ?',
-      whereArgs: [productCode],
+      where: 'productCode = ? AND productType = ?',
+      whereArgs: [productCode, productTypeDisplayNames[productType]],
       limit: 1,
     );
     return maps.isNotEmpty ? Product.fromMap(maps.first) : null;
@@ -144,6 +146,22 @@ class DatabaseService {
     final db = await instance.database;
     final id = await db.insert('production_records', record.toMap());
     return record.copy(id: id);
+  }
+
+  /// 删除生产记录
+  Future<bool> deleteProductionRecord(int recordId) async {
+    final db = await instance.database;
+    try {
+      final result = await db.delete(
+        'production_records',
+        where: 'id = ?',
+        whereArgs: [recordId],
+      );
+      return result > 0;
+    } catch (e) {
+      print('删除生产记录出错: $e');
+      return false;
+    }
   }
 
   Future<List<ProductionRecord>> getProductionRecordsByProduct(int productId, {DateTime? startDate, DateTime? endDate}) async {
@@ -306,14 +324,6 @@ class DatabaseService {
   ''', [productType, '$year-$monthString']);
   }
 
-  Future<int> deleteProductionRecord(int id) async {
-    final db = await instance.database;
-    return await db.delete(
-      'production_records',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
   // 获取今天的生产记录，按ProductType分组
   Future<List<ProductionRecord>> getTodayProductionRecords() async {
     final db = await instance.database;

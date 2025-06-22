@@ -540,7 +540,7 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
         title: const Text(
-          '周生产概览',
+          '周统计概览',
           style: TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 20,
@@ -638,7 +638,7 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
                     ),
                     const SizedBox(width: 16),
                     Text(
-                      '周生产概览',
+                      '周统计概览',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 22,
@@ -782,7 +782,7 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
                             ),
                             const SizedBox(height: 24),
                             Text(
-                              '本周暂无生产记录',
+                              '本周暂无记录',
                               style: TextStyle(
                                 fontSize: 20,
                                 color: Colors.grey.shade700,

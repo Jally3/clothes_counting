@@ -48,6 +48,68 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  /// 显示删除确认弹窗
+  void _showDeleteConfirmDialog(ProductionRecord record) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('确认删除'),
+          content: Text('确定要删除这条生产记录吗？\n\n时间：${record.date.toString().substring(0, 16)}\n数量：${record.quantity}'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _deleteRecord(record);
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.red,
+              ),
+              child: const Text('删除'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// 删除生产记录
+  void _deleteRecord(ProductionRecord record) async {
+    try {
+      final success = await _databaseService.deleteProductionRecord(record.id!);
+      if (success) {
+        // 删除成功，刷新数据
+        _loadTodayRecords();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('记录删除成功'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        // 删除失败
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('删除失败，请重试'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      // 异常处理
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('删除出错：$e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   void _groupRecordsByType(List<ProductionRecord> records) {
     _todayRecords = records;
     _groupedRecords.clear();
@@ -78,73 +140,76 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildRecordItem(ProductionRecord record) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.all(6), // 减少内边距
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue.shade100),
+        border: Border.all(
+          color: Colors.grey.shade200,
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.blue.withOpacity(0.08),
+            color: Colors.grey.withOpacity(0.08),
             spreadRadius: 0,
-            blurRadius: 8,
+            blurRadius: 4,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: ListTile(
-        dense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        title: Text(
-          '编号: ${record.productCode}',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 15,
-            color: Colors.blue.shade800,
-          ),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.blue.shade50, Colors.blue.shade100],
-                  ),
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: Colors.blue.shade200),
-                ),
-                child: Text(
-                  '数量: ${record.quantity}',
-                  style: TextStyle(
-                    color: Colors.blue.shade700,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+      child:Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.black)
+            ),
+            child: Text(
+              '时间：${record.date.toString().substring(11, 16)}',
+              style: const TextStyle(
+                color: Colors.black,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
               ),
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  '时间：${record.date.toString().substring(11, 16)}',
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.blue.shade50, Colors.blue.shade100],
+              ),
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: Colors.blue.shade200),
+            ),
+            child: Text(
+              '数量: ${record.quantity}',
+              style: TextStyle(
+                color: Colors.blue.shade700,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          // 删除按钮
+          IconButton(
+            onPressed: () => _showDeleteConfirmDialog(record),
+            icon: Icon(
+              Icons.delete_outline,
+              color: Colors.red.shade400,
+              size: 20,
+            ),
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(
+              minWidth: 32,
+              minHeight: 32,
+            ),
+          ),
+        ],
+      )
     );
   }
 
@@ -180,32 +245,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               borderRadius: BorderRadius.circular(16),
               onTap: () => _toggleProductCodeExpanded(productCode),
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Colors.indigo.shade400, Colors.blue.shade400],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.indigo.withOpacity(0.3),
-                            spreadRadius: 0,
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.qr_code_rounded,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -274,7 +316,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(builder: (context) =>  ProductionRecordScreen(productCode: productCode,productType: productType,)),
-                        );
+                        ).then((a) =>
+                            _loadTodayRecords());;
                       },
                       child: Container(
                         padding: const EdgeInsets.all(6),
@@ -293,7 +336,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.8),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: const BorderRadius.all(Radius.circular(8)),
                       ),
                       child: Icon(
                         isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
@@ -307,14 +350,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           if (isExpanded)
-            Container(
-              padding: const EdgeInsets.only(top: 8, bottom: 12),
-              child: Column(
-                children: records.map((record) => Padding(
-                  padding: const EdgeInsets.only(left: 8, right: 8, bottom: 6),
-                  child: _buildRecordItem(record),
-                )).toList(),
-              ),
+            Column(
+              children: records.map((record) => Padding(
+                padding: const EdgeInsets.only(left: 8, right: 8, bottom: 6),
+                child: _buildRecordItem(record),
+              )).toList(),
             ),
         ],
       ),
@@ -335,7 +375,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         gradient: LinearGradient(
@@ -364,7 +404,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               borderRadius: BorderRadius.circular(20),
               onTap: () => _toggleExpanded(productType),
               child: Padding(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
                     Container(
@@ -383,7 +423,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                         ],
                       ),
-                      child: Icon(
+                      child:  Icon(
                         _getProductTypeIcon(productType),
                         color: Colors.white,
                         size: 26,
@@ -407,7 +447,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             runSpacing: 10,
                             children: [
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: Colors.purple.shade100,
                                   borderRadius: BorderRadius.circular(15),
@@ -424,7 +464,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                               const SizedBox(width: 8),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: Colors.orange.shade100,
                                   borderRadius: BorderRadius.circular(15),
@@ -441,7 +481,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                               const SizedBox(width: 8),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     colors: [Colors.green.shade500, Colors.teal.shade500],
@@ -523,7 +563,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
         title: const Text(
-          '生产统计助手',
+          '统计助手',
           style: TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 20,
@@ -545,16 +585,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         // 在AppBar的actions中添加周概览按钮（在月度统计按钮之前）
         actions: [
         Container(
-        margin: const EdgeInsets.only(right: 8),
-        decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(12),
-        ),
-        child: IconButton(
-        icon: const Icon(Icons.refresh_rounded),
-        onPressed: _loadTodayRecords,
-        tooltip: '刷新数据',
-        ),
+          margin: const EdgeInsets.only(right: 8),
+          decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(12),
+          ),
+          child: IconButton(
+          icon: const Icon(Icons.refresh_rounded),
+          onPressed: _loadTodayRecords,
+          tooltip: '刷新数据',
+          ),
         ),
         Container(
         margin: const EdgeInsets.only(right: 8),
@@ -562,8 +602,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         color: Colors.white.withOpacity(0.2),
         borderRadius: BorderRadius.circular(12),
         ),
-        child: IconButton(
-        icon: const Icon(Icons.calendar_view_week_rounded),
+        child: TextButton(
+          child: const Text('周',style: TextStyle(fontSize: 20,fontWeight:FontWeight.bold,color: Colors.white),),
+        // icon: const Icon(Icons.calendar_view_week_rounded),
         onPressed: () {
         Navigator.push(
         context,
@@ -572,7 +613,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         );
         },
-        tooltip: '周统计',
+        // tooltip: '周统计',
         ),
         ),
         Container(
@@ -581,8 +622,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         color: Colors.white.withOpacity(0.2),
         borderRadius: BorderRadius.circular(12),
         ),
-        child: IconButton(
-        icon: const Icon(Icons.calendar_month_rounded),
+        child: TextButton(
+          child: const Text('月',style: TextStyle(fontSize: 20,fontWeight:FontWeight.bold,color: Colors.white),),
         onPressed: () {
         Navigator.push(
         context,
@@ -591,7 +632,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         );
         },
-        tooltip: '月度统计',
         ),
         ),
         ],
@@ -600,7 +640,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           Container(
             margin: const EdgeInsets.all(16.0),
-            padding: const EdgeInsets.all(24.0),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [Colors.white, Colors.blue.shade50],
@@ -622,7 +662,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Row(
                   children: [
@@ -645,77 +685,64 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: const Icon(
                         Icons.dashboard_rounded,
                         color: Colors.white,
-                        size: 28,
+                        size: 24,
                       ),
                     ),
                     const SizedBox(width: 16),
                     Text(
-                      '今日生产概览',
+                      '今日概览｜',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 22,
+                        fontSize: 20,
+                        color: Colors.blue.shade800,
+                      ),
+                    ),
+                    Text(
+                      '${selectedDate.year}年${selectedDate.month}月${selectedDate.day}日',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
                         color: Colors.blue.shade800,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-
-                        Text(
-                          '${selectedDate.year}年${selectedDate.month}月${selectedDate.day}日',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                            color: Colors.blue.shade800,
-                          ),
-                        ),
-                      ],
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.green.shade500, Colors.teal.shade500],
                     ),
-                    const SizedBox(height: 20),
-
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Colors.green.shade500, Colors.teal.shade500],
+                    borderRadius: BorderRadius.circular(25),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.green.withOpacity(0.4),
+                        spreadRadius: 0,
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.production_quantity_limits_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '总数量: ${_todayRecords.fold<int>(0, (sum, record) => sum + record.quantity)}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
                         ),
-                        borderRadius: BorderRadius.circular(25),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.green.withOpacity(0.4),
-                            spreadRadius: 0,
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.production_quantity_limits_rounded,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '总数量: ${_todayRecords.fold<int>(0, (sum, record) => sum + record.quantity)}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -784,7 +811,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             const SizedBox(height: 24),
                             Text(
-                              '今日暂无生产记录',
+                              '今日暂无记录',
                               style: TextStyle(
                                 fontSize: 20,
                                 color: Colors.grey.shade700,
@@ -803,7 +830,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       )
                     : ListView(
-                        padding: const EdgeInsets.only(bottom: 100),
+                        padding: const EdgeInsets.only(bottom: 80), // 减少底部padding
                         children: _groupedRecords.entries
                             .map((entry) => _buildProductTypeSection(entry.key, entry.value))
                             .toList(),
@@ -825,11 +852,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         child: FloatingActionButton.extended(
           onPressed: () async {
-            final result = await Navigator.push(
+           Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const ProductionRecordScreen()),
-            );
-            _loadTodayRecords();
+            ).then((a) =>
+               _loadTodayRecords());
+
           },
           icon: const Icon(Icons.add_rounded, size: 24),
           label: const Text(
