@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../services/database_service.dart';
 import '../models/production_record_model.dart';
 import '../models/product_model.dart';
+import '../repositories/production_repository.dart';
+import '../utils/production_grouping.dart';
 
 class WeeklyStatsScreen extends StatefulWidget {
   const WeeklyStatsScreen({super.key});
@@ -12,7 +13,7 @@ class WeeklyStatsScreen extends StatefulWidget {
 }
 
 class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
-  final DatabaseService _databaseService = DatabaseService.instance;
+  final ProductionRepository _repository = ProductionRepository.instance;
   List<ProductionRecord> _weeklyRecords = [];
   Map<ProductType, List<ProductionRecord>> _groupedRecords = {};
   Map<ProductType, bool> _expandedStates = {};
@@ -33,11 +34,13 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
     // 计算本周的开始日期（周一）
     final weekday = now.weekday;
     _selectedWeekStart = now.subtract(Duration(days: weekday - 1));
-    _selectedWeekStart = DateTime(_selectedWeekStart.year, _selectedWeekStart.month, _selectedWeekStart.day);
-    
+    _selectedWeekStart = DateTime(_selectedWeekStart.year,
+        _selectedWeekStart.month, _selectedWeekStart.day);
+
     // 计算本周的结束日期（周日）
     _selectedWeekEnd = _selectedWeekStart.add(const Duration(days: 6));
-    _selectedWeekEnd = DateTime(_selectedWeekEnd.year, _selectedWeekEnd.month, _selectedWeekEnd.day, 23, 59, 59);
+    _selectedWeekEnd = DateTime(_selectedWeekEnd.year, _selectedWeekEnd.month,
+        _selectedWeekEnd.day, 23, 59, 59);
   }
 
   Future<void> _loadWeeklyRecords() async {
@@ -46,7 +49,9 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
     });
 
     try {
-      final records = await _databaseService.getRecordsByDateRange(_selectedWeekStart, _selectedWeekEnd);
+      final records = await _repository.getRecordsByDateRange(
+          _selectedWeekStart, _selectedWeekEnd);
+      if (!mounted) return;
       _groupRecordsByType(records);
     } catch (e) {
       if (mounted) {
@@ -65,16 +70,11 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
 
   void _groupRecordsByType(List<ProductionRecord> records) {
     _weeklyRecords = records;
-    _groupedRecords.clear();
-    
-    for (final record in records) {
-      if (!_groupedRecords.containsKey(record.productType)) {
-        _groupedRecords[record.productType] = [];
-        _expandedStates[record.productType] = false;
-      }
-      _groupedRecords[record.productType]!.add(record);
+    _groupedRecords = groupRecordsByProductType(records);
+    for (final productType in _groupedRecords.keys) {
+      _expandedStates.putIfAbsent(productType, () => false);
     }
-    
+
     setState(() {});
   }
 
@@ -86,7 +86,8 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
 
   void _toggleProductCodeExpanded(String productCode) {
     setState(() {
-      _productCodeExpandedStates[productCode] = !(_productCodeExpandedStates[productCode] ?? false);
+      _productCodeExpandedStates[productCode] =
+          !(_productCodeExpandedStates[productCode] ?? false);
     });
   }
 
@@ -99,18 +100,20 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
       locale: const Locale('zh', 'CN'),
       helpText: '选择周内任意日期',
     );
-    
+
     if (picked != null) {
       // 计算选择日期所在周的开始和结束
       final weekday = picked.weekday;
       final weekStart = picked.subtract(Duration(days: weekday - 1));
       final weekEnd = weekStart.add(const Duration(days: 6));
-      
+
       setState(() {
-        _selectedWeekStart = DateTime(weekStart.year, weekStart.month, weekStart.day);
-        _selectedWeekEnd = DateTime(weekEnd.year, weekEnd.month, weekEnd.day, 23, 59, 59);
+        _selectedWeekStart =
+            DateTime(weekStart.year, weekStart.month, weekStart.day);
+        _selectedWeekEnd =
+            DateTime(weekEnd.year, weekEnd.month, weekEnd.day, 23, 59, 59);
       });
-      
+
       _loadWeeklyRecords();
     }
   }
@@ -147,7 +150,8 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [Colors.purple.shade50, Colors.purple.shade100],
@@ -161,6 +165,29 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
                     color: Colors.purple.shade700,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Visibility(
+                visible: record.isRework,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.blue.shade50, Colors.blue.shade100],
+                    ),
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: const Text(
+                    '返工',
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
@@ -187,10 +214,13 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
     );
   }
 
-  Widget _buildProductCodeGroup(String productCode, List<ProductionRecord> records) {
+  Widget _buildProductCodeGroup(
+      String productCode, List<ProductionRecord> records) {
     final isExpanded = _productCodeExpandedStates[productCode] ?? false;
-    final totalQuantity = records.fold<int>(0, (sum, record) => sum + record.quantity);
-    
+    final totalQuantity =
+        records.fold<int>(0, (sum, record) => sum + record.quantity);
+    final hasRemark = records.any((e) => e.isRework);
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -226,7 +256,10 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [Colors.purple.shade400, Colors.pink.shade400],
+                          colors: [
+                            Colors.purple.shade400,
+                            Colors.pink.shade400
+                          ],
                         ),
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
@@ -261,11 +294,13 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
                           Row(
                             children: [
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
                                   color: Colors.amber.shade100,
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.amber.shade300),
+                                  border:
+                                      Border.all(color: Colors.amber.shade300),
                                 ),
                                 child: Text(
                                   '${records.length}条记录',
@@ -278,10 +313,14 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
                               ),
                               const SizedBox(width: 8),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
-                                    colors: [Colors.green.shade400, Colors.teal.shade400],
+                                    colors: [
+                                      Colors.green.shade400,
+                                      Colors.teal.shade400
+                                    ],
                                   ),
                                   borderRadius: BorderRadius.circular(12),
                                   boxShadow: [
@@ -302,6 +341,32 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
                                   ),
                                 ),
                               ),
+                              Visibility(
+                                visible: hasRemark,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Colors.blue.shade50,
+                                        Colors.blue.shade100
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(15),
+                                    border:
+                                        Border.all(color: Colors.blue.shade200),
+                                  ),
+                                  child: const Text(
+                                    '返工',
+                                    style: TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ],
@@ -314,7 +379,9 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
-                        isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                        isExpanded
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
                         color: Colors.purple.shade600,
                         size: 24,
                       ),
@@ -328,10 +395,13 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
             Container(
               padding: const EdgeInsets.only(top: 8, bottom: 12),
               child: Column(
-                children: records.map((record) => Padding(
-                  padding: const EdgeInsets.only(left: 8, right: 8, bottom: 6),
-                  child: _buildRecordItem(record),
-                )).toList(),
+                children: records
+                    .map((record) => Padding(
+                          padding: const EdgeInsets.only(
+                              left: 8, right: 8, bottom: 6),
+                          child: _buildRecordItem(record),
+                        ))
+                    .toList(),
               ),
             ),
         ],
@@ -339,18 +409,14 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
     );
   }
 
-  Widget _buildProductTypeSection(ProductType productType, List<ProductionRecord> records) {
+  Widget _buildProductTypeSection(
+      ProductType productType, List<ProductionRecord> records) {
     final isExpanded = _expandedStates[productType] ?? false;
-    final totalQuantity = records.fold<int>(0, (sum, record) => sum + record.quantity);
-    
-    final Map<String, List<ProductionRecord>> recordsByCode = {};
-    for (final record in records) {
-      if (!recordsByCode.containsKey(record.productCode)) {
-        recordsByCode[record.productCode] = [];
-      }
-      recordsByCode[record.productCode]!.add(record);
-    }
-    
+    final totalQuantity =
+        records.fold<int>(0, (sum, record) => sum + record.quantity);
+
+    final recordsByCode = groupRecordsByProductCode(records);
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -388,7 +454,10 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [Colors.purple.shade500, Colors.pink.shade500],
+                          colors: [
+                            Colors.purple.shade500,
+                            Colors.pink.shade500
+                          ],
                         ),
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
@@ -424,11 +493,13 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
                             runSpacing: 10,
                             children: [
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 5),
                                 decoration: BoxDecoration(
                                   color: Colors.orange.shade100,
                                   borderRadius: BorderRadius.circular(15),
-                                  border: Border.all(color: Colors.orange.shade300),
+                                  border:
+                                      Border.all(color: Colors.orange.shade300),
                                 ),
                                 child: Text(
                                   '${recordsByCode.length}个编号',
@@ -441,11 +512,13 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
                               ),
                               const SizedBox(width: 8),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 5),
                                 decoration: BoxDecoration(
                                   color: Colors.blue.shade100,
                                   borderRadius: BorderRadius.circular(15),
-                                  border: Border.all(color: Colors.blue.shade300),
+                                  border:
+                                      Border.all(color: Colors.blue.shade300),
                                 ),
                                 child: Text(
                                   '${records.length}条记录',
@@ -458,10 +531,14 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
                               ),
                               const SizedBox(width: 8),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 5),
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
-                                    colors: [Colors.green.shade500, Colors.teal.shade500],
+                                    colors: [
+                                      Colors.green.shade500,
+                                      Colors.teal.shade500
+                                    ],
                                   ),
                                   borderRadius: BorderRadius.circular(15),
                                   boxShadow: [
@@ -495,7 +572,9 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
                         border: Border.all(color: Colors.purple.shade200),
                       ),
                       child: Icon(
-                        isExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                        isExpanded
+                            ? Icons.expand_less_rounded
+                            : Icons.expand_more_rounded,
                         size: 28,
                         color: Colors.purple.shade600,
                       ),
@@ -509,9 +588,10 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Column(
-                children: recordsByCode.entries.map((entry) => 
-                  _buildProductCodeGroup(entry.key, entry.value)
-                ).toList(),
+                children: recordsByCode.entries
+                    .map((entry) =>
+                        _buildProductCodeGroup(entry.key, entry.value))
+                    .toList(),
               ),
             ),
         ],
@@ -618,7 +698,10 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [Colors.purple.shade500, Colors.pink.shade500],
+                          colors: [
+                            Colors.purple.shade500,
+                            Colors.pink.shade500
+                          ],
                         ),
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
@@ -678,7 +761,8 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
                     // 总数量信息
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 12),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [Colors.green.shade500, Colors.teal.shade500],
@@ -739,7 +823,8 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
                             ],
                           ),
                           child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.purple.shade500),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.purple.shade500),
                             strokeWidth: 3,
                           ),
                         ),
@@ -803,7 +888,8 @@ class _WeeklyStatsScreenState extends State<WeeklyStatsScreen> {
                     : ListView(
                         padding: const EdgeInsets.only(bottom: 20),
                         children: _groupedRecords.entries
-                            .map((entry) => _buildProductTypeSection(entry.key, entry.value))
+                            .map((entry) => _buildProductTypeSection(
+                                entry.key, entry.value))
                             .toList(),
                       ),
           ),

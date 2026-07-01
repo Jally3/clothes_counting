@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import '../services/database_service.dart';
 import '../models/production_record_model.dart';
 import '../models/product_model.dart';
+import '../repositories/production_repository.dart';
+import '../utils/production_grouping.dart';
 import 'monthly_stats_screen.dart';
 import 'production_record_screen.dart';
- import 'weekly_stats_screen.dart';
+import 'weekly_stats_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -15,7 +15,7 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  final DatabaseService _databaseService = DatabaseService.instance;
+  final ProductionRepository _repository = ProductionRepository.instance;
   List<ProductionRecord> _todayRecords = [];
   Map<ProductType, List<ProductionRecord>> _groupedRecords = {};
   Map<ProductType, bool> _expandedStates = {};
@@ -35,16 +35,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
 
     try {
-      final records = await _databaseService.getTodayProductionRecords();
+      final records = await _repository.getTodayProductionRecords();
+      if (!mounted) return;
       _groupRecordsByType(records);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('加载今日记录失败: $e')),
       );
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -55,7 +59,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('确认删除'),
-          content: Text('确定要删除这条生产记录吗？\n\n时间：${record.date.toString().substring(0, 16)}\n数量：${record.quantity}'),
+          content: Text(
+              '确定要删除这条生产记录吗？\n\n时间：${record.date.toString().substring(0, 16)}\n数量：${record.quantity}'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -80,7 +85,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// 删除生产记录
   void _deleteRecord(ProductionRecord record) async {
     try {
-      final success = await _databaseService.deleteProductionRecord(record.id!);
+      final recordId = record.id;
+      if (recordId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('记录尚未保存，无法删除'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      final success = await _repository.deleteRecord(recordId);
+      if (!mounted) return;
       if (success) {
         // 删除成功，刷新数据
         _loadTodayRecords();
@@ -100,6 +117,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
       // 异常处理
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -112,17 +130,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _groupRecordsByType(List<ProductionRecord> records) {
     _todayRecords = records;
-    _groupedRecords.clear();
-    
-    // 按ProductType分组
-    for (final record in records) {
-      if (!_groupedRecords.containsKey(record.productType)) {
-        _groupedRecords[record.productType] = [];
-        _expandedStates[record.productType] = false; // 默认收起
-      }
-      _groupedRecords[record.productType]!.add(record);
+    _groupedRecords = groupRecordsByProductType(records);
+    for (final productType in _groupedRecords.keys) {
+      _expandedStates.putIfAbsent(productType, () => false);
     }
-    
+
     setState(() {});
   }
 
@@ -134,89 +146,133 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _toggleProductCodeExpanded(String productCode) {
     setState(() {
-      _productCodeExpandedStates[productCode] = !(_productCodeExpandedStates[productCode] ?? false);
+      _productCodeExpandedStates[productCode] =
+          !(_productCodeExpandedStates[productCode] ?? false);
     });
   }
 
   Widget _buildRecordItem(ProductionRecord record) {
+    final syncLabel = _getSyncLabel(record.syncStatus);
     return Container(
-      padding: const EdgeInsets.all(6), // 减少内边距
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.grey.shade200,
-          width: 1,
+        padding: const EdgeInsets.all(6), // 减少内边距
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: Colors.grey.shade200,
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.08),
+              spreadRadius: 0,
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.08),
-            spreadRadius: 0,
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child:Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.black)
-            ),
-            child: Text(
-              '时间：${record.date.toString().substring(11, 16)}',
-              style: const TextStyle(
-                color: Colors.black,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.black)),
+              child: Text(
+                '时间：${record.date.toString().substring(11, 16)}',
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.blue.shade50, Colors.blue.shade100],
+            Visibility(
+              visible: record.isRework,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.blue.shade50, Colors.blue.shade100],
+                  ),
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: const Text(
+                  '返工',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: Colors.blue.shade200),
             ),
-            child: Text(
-              '数量: ${record.quantity}',
-              style: TextStyle(
-                color: Colors.blue.shade700,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.blue.shade50, Colors.blue.shade100],
+                ),
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Text(
+                '数量: ${record.quantity}',
+                style: TextStyle(
+                  color: Colors.blue.shade700,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
-          // 删除按钮
-          IconButton(
-            onPressed: () => _showDeleteConfirmDialog(record),
-            icon: Icon(
-              Icons.delete_outline,
-              color: Colors.red.shade400,
-              size: 20,
+            if (syncLabel != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Text(
+                  syncLabel,
+                  style: TextStyle(
+                    color: Colors.grey.shade700,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            // 删除按钮
+            IconButton(
+              onPressed: () => _showDeleteConfirmDialog(record),
+              icon: Icon(
+                Icons.delete_outline,
+                color: Colors.red.shade400,
+                size: 20,
+              ),
+              padding: const EdgeInsets.all(4),
+              constraints: const BoxConstraints(
+                minWidth: 32,
+                minHeight: 32,
+              ),
             ),
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(
-              minWidth: 32,
-              minHeight: 32,
-            ),
-          ),
-        ],
-      )
-    );
+          ],
+        ));
   }
 
-  Widget _buildProductCodeGroup(String productCode, List<ProductionRecord> records,ProductType productType) {
-    final isExpanded = _productCodeExpandedStates[productCode] ?? false;
-    final totalQuantity = records.fold<int>(0, (sum, record) => sum + record.quantity);
-    
+  Widget _buildProductCodeGroup(String productCode,
+      List<ProductionRecord> records, ProductType productType) {
+    final expansionKey = '${productType.name}:$productCode';
+    final isExpanded = _productCodeExpandedStates[expansionKey] ?? false;
+    final totalQuantity =
+        records.fold<int>(0, (sum, record) => sum + record.quantity);
+    final hasRemark = records.any((e) => e.isRework);
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -243,7 +299,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             borderRadius: BorderRadius.circular(16),
             child: InkWell(
               borderRadius: BorderRadius.circular(16),
-              onTap: () => _toggleProductCodeExpanded(productCode),
+              onTap: () => _toggleProductCodeExpanded(expansionKey),
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Row(
@@ -264,11 +320,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Row(
                             children: [
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
                                   color: Colors.amber.shade100,
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.amber.shade300),
+                                  border:
+                                      Border.all(color: Colors.amber.shade300),
                                 ),
                                 child: Text(
                                   '${records.length}条记录',
@@ -281,10 +339,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                               const SizedBox(width: 8),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
-                                    colors: [Colors.green.shade400, Colors.teal.shade400],
+                                    colors: [
+                                      Colors.green.shade400,
+                                      Colors.teal.shade400
+                                    ],
                                   ),
                                   borderRadius: BorderRadius.circular(12),
                                   boxShadow: [
@@ -305,6 +367,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ),
                                 ),
                               ),
+                              const SizedBox(width: 8),
+                              Visibility(
+                                visible: hasRemark,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Colors.blue.shade50,
+                                        Colors.blue.shade100
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(15),
+                                    border:
+                                        Border.all(color: Colors.blue.shade200),
+                                  ),
+                                  child: const Text(
+                                    '返工',
+                                    style: TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ],
@@ -312,12 +401,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     GestureDetector(
                       behavior: HitTestBehavior.translucent,
-                      onTap: (){
+                      onTap: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) =>  ProductionRecordScreen(productCode: productCode,productType: productType,)),
-                        ).then((a) =>
-                            _loadTodayRecords());;
+                          MaterialPageRoute(
+                              builder: (context) => ProductionRecordScreen(
+                                    productCode: productCode,
+                                    productType: productType,
+                                  )),
+                        ).then((a) => _loadTodayRecords());
                       },
                       child: Container(
                         padding: const EdgeInsets.all(6),
@@ -327,19 +419,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(
-                         Icons.add,
+                          Icons.add,
                           color: Colors.indigo.shade600,
                           size: 24,
                         ),
                       ),
-                    ),  Container(
+                    ),
+                    Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.8),
-                        borderRadius: const BorderRadius.all(Radius.circular(8)),
+                        borderRadius:
+                            const BorderRadius.all(Radius.circular(8)),
                       ),
                       child: Icon(
-                        isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                        isExpanded
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
                         color: Colors.indigo.shade600,
                         size: 24,
                       ),
@@ -351,29 +447,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           if (isExpanded)
             Column(
-              children: records.map((record) => Padding(
-                padding: const EdgeInsets.only(left: 8, right: 8, bottom: 6),
-                child: _buildRecordItem(record),
-              )).toList(),
+              children: records
+                  .map((record) => Padding(
+                        padding:
+                            const EdgeInsets.only(left: 8, right: 8, bottom: 6),
+                        child: _buildRecordItem(record),
+                      ))
+                  .toList(),
             ),
         ],
       ),
     );
   }
 
-  Widget _buildProductTypeSection(ProductType productType, List<ProductionRecord> records) {
+  Widget _buildProductTypeSection(
+      ProductType productType, List<ProductionRecord> records) {
     final isExpanded = _expandedStates[productType] ?? false;
-    final totalQuantity = records.fold<int>(0, (sum, record) => sum + record.quantity);
-    
+    final totalQuantity =
+        records.fold<int>(0, (sum, record) => sum + record.quantity);
+
     // 按产品编号分组
-    final Map<String, List<ProductionRecord>> recordsByCode = {};
-    for (final record in records) {
-      if (!recordsByCode.containsKey(record.productCode)) {
-        recordsByCode[record.productCode] = [];
-      }
-      recordsByCode[record.productCode]!.add(record);
-    }
-    
+    final recordsByCode = groupRecordsByProductCode(records);
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
@@ -411,7 +506,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [Colors.blue.shade500, Colors.indigo.shade500],
+                          colors: [
+                            Colors.blue.shade500,
+                            Colors.indigo.shade500
+                          ],
                         ),
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
@@ -423,7 +521,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                         ],
                       ),
-                      child:  Icon(
+                      child: Icon(
                         _getProductTypeIcon(productType),
                         color: Colors.white,
                         size: 26,
@@ -447,11 +545,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             runSpacing: 10,
                             children: [
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 4, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: Colors.purple.shade100,
                                   borderRadius: BorderRadius.circular(15),
-                                  border: Border.all(color: Colors.purple.shade300),
+                                  border:
+                                      Border.all(color: Colors.purple.shade300),
                                 ),
                                 child: Text(
                                   '${recordsByCode.length}个编号',
@@ -464,11 +564,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                               const SizedBox(width: 8),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 4, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: Colors.orange.shade100,
                                   borderRadius: BorderRadius.circular(15),
-                                  border: Border.all(color: Colors.orange.shade300),
+                                  border:
+                                      Border.all(color: Colors.orange.shade300),
                                 ),
                                 child: Text(
                                   '${records.length}条记录',
@@ -481,10 +583,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                               const SizedBox(width: 8),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 4, vertical: 2),
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
-                                    colors: [Colors.green.shade500, Colors.teal.shade500],
+                                    colors: [
+                                      Colors.green.shade500,
+                                      Colors.teal.shade500
+                                    ],
                                   ),
                                   borderRadius: BorderRadius.circular(15),
                                   boxShadow: [
@@ -518,7 +624,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         border: Border.all(color: Colors.blue.shade200),
                       ),
                       child: Icon(
-                        isExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                        isExpanded
+                            ? Icons.expand_less_rounded
+                            : Icons.expand_more_rounded,
                         size: 28,
                         color: Colors.blue.shade600,
                       ),
@@ -532,9 +640,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Column(
-                children: recordsByCode.entries.map((entry) => 
-                  _buildProductCodeGroup(entry.key, entry.value,productType)
-                ).toList(),
+                children: recordsByCode.entries
+                    .map((entry) => _buildProductCodeGroup(
+                        entry.key, entry.value, productType))
+                    .toList(),
               ),
             ),
         ],
@@ -554,6 +663,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return Icons.sports_baseball_rounded;
       default:
         return Icons.category_rounded;
+    }
+  }
+
+  String? _getSyncLabel(SyncStatus status) {
+    switch (status) {
+      case SyncStatus.pending:
+        return '待上传';
+      case SyncStatus.failed:
+        return '上传失败';
+      case SyncStatus.syncing:
+        return '上传中';
+      case SyncStatus.deletedPending:
+        return '待删除';
+      case SyncStatus.synced:
+        return null;
     }
   }
 
@@ -581,59 +705,71 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         foregroundColor: Colors.white,
         // 在文件顶部添加导入
-        
+
         // 在AppBar的actions中添加周概览按钮（在月度统计按钮之前）
         actions: [
-        Container(
-          margin: const EdgeInsets.only(right: 8),
-          decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.2),
-          borderRadius: BorderRadius.circular(12),
+          Container(
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.refresh_rounded),
+              onPressed: _loadTodayRecords,
+              tooltip: '刷新数据',
+            ),
           ),
-          child: IconButton(
-          icon: const Icon(Icons.refresh_rounded),
-          onPressed: _loadTodayRecords,
-          tooltip: '刷新数据',
+          Container(
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TextButton(
+              child: const Text(
+                '周',
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white),
+              ),
+              // icon: const Icon(Icons.calendar_view_week_rounded),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const WeeklyStatsScreen(),
+                  ),
+                );
+              },
+              // tooltip: '周统计',
+            ),
           ),
-        ),
-        Container(
-        margin: const EdgeInsets.only(right: 8),
-        decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(12),
-        ),
-        child: TextButton(
-          child: const Text('周',style: TextStyle(fontSize: 20,fontWeight:FontWeight.bold,color: Colors.white),),
-        // icon: const Icon(Icons.calendar_view_week_rounded),
-        onPressed: () {
-        Navigator.push(
-        context,
-        MaterialPageRoute(
-        builder: (context) => const WeeklyStatsScreen(),
-        ),
-        );
-        },
-        // tooltip: '周统计',
-        ),
-        ),
-        Container(
-        margin: const EdgeInsets.only(right: 12),
-        decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(12),
-        ),
-        child: TextButton(
-          child: const Text('月',style: TextStyle(fontSize: 20,fontWeight:FontWeight.bold,color: Colors.white),),
-        onPressed: () {
-        Navigator.push(
-        context,
-        MaterialPageRoute(
-        builder: (context) => const MonthlyStatsScreen(),
-        ),
-        );
-        },
-        ),
-        ),
+          Container(
+            margin: const EdgeInsets.only(right: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TextButton(
+              child: const Text(
+                '月',
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white),
+              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const MonthlyStatsScreen(),
+                  ),
+                );
+              },
+            ),
+          ),
         ],
       ),
       body: Column(
@@ -670,7 +806,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [Colors.blue.shade500, Colors.indigo.shade500],
+                          colors: [
+                            Colors.blue.shade500,
+                            Colors.indigo.shade500
+                          ],
                         ),
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
@@ -709,7 +848,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 const SizedBox(height: 12),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [Colors.green.shade500, Colors.teal.shade500],
@@ -768,7 +908,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ],
                           ),
                           child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade500),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.blue.shade500),
                             strokeWidth: 3,
                           ),
                         ),
@@ -830,9 +971,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       )
                     : ListView(
-                        padding: const EdgeInsets.only(bottom: 80), // 减少底部padding
+                        padding:
+                            const EdgeInsets.only(bottom: 80), // 减少底部padding
                         children: _groupedRecords.entries
-                            .map((entry) => _buildProductTypeSection(entry.key, entry.value))
+                            .map((entry) => _buildProductTypeSection(
+                                entry.key, entry.value))
                             .toList(),
                       ),
           ),
@@ -852,12 +995,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         child: FloatingActionButton.extended(
           onPressed: () async {
-           Navigator.push(
+            Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const ProductionRecordScreen()),
-            ).then((a) =>
-               _loadTodayRecords());
-
+              MaterialPageRoute(
+                  builder: (context) => const ProductionRecordScreen()),
+            ).then((a) => _loadTodayRecords());
           },
           icon: const Icon(Icons.add_rounded, size: 24),
           label: const Text(

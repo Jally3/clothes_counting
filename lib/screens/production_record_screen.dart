@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/product_model.dart';
-import '../models/production_record_model.dart';
-import '../services/database_service.dart';
+import '../repositories/production_repository.dart';
 
 class ProductionRecordScreen extends StatefulWidget {
-  final String productCode ;
-  final ProductType productType ;
-  const ProductionRecordScreen({super.key,  this.productCode = '',  this.productType=ProductType.clothes});
+  final String productCode;
+  final ProductType productType;
+  const ProductionRecordScreen(
+      {super.key,
+      this.productCode = '',
+      this.productType = ProductType.clothes});
 
   @override
   State<ProductionRecordScreen> createState() => _ProductionRecordScreenState();
@@ -20,17 +22,19 @@ class _ProductionRecordScreenState extends State<ProductionRecordScreen> {
   final _quantityController = TextEditingController();
   DateTime _selectedDateTime = DateTime.now();
   bool _isLoading = false;
+  bool _isRework = false; // 返工状态，默认为false
 
-  final DatabaseService _dbService = DatabaseService.instance;
+  final ProductionRepository _repository = ProductionRepository.instance;
 
   @override
   void initState() {
-    if(widget.productCode.isNotEmpty){
+    if (widget.productCode.isNotEmpty) {
       _productCodeController.text = widget.productCode;
     }
-   _selectedProductType = widget.productType;
+    _selectedProductType = widget.productType;
     super.initState();
   }
+
   @override
   void dispose() {
     _productCodeController.dispose();
@@ -45,13 +49,13 @@ class _ProductionRecordScreenState extends State<ProductionRecordScreen> {
       firstDate: DateTime(2020),
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
-    
+
     if (pickedDate != null) {
       final TimeOfDay? pickedTime = await showTimePicker(
         context: context,
         initialTime: TimeOfDay.fromDateTime(_selectedDateTime),
       );
-      
+
       if (pickedTime != null) {
         setState(() {
           _selectedDateTime = DateTime(
@@ -73,26 +77,14 @@ class _ProductionRecordScreenState extends State<ProductionRecordScreen> {
       });
 
       try {
-        // 查找或创建产品
-        Product? product = await _dbService.getProductByCode(_productCodeController.text, _selectedProductType);
-        if (product == null) {
-          product = Product(
-            type: _selectedProductType,
-            productCode: _productCodeController.text,
-          );
-          product = await _dbService.createProduct(product);
-        } 
-
-        final record = ProductionRecord(
-          productId: product.id!,
-          date: _selectedDateTime,
-          quantity: int.parse(_quantityController.text), 
+        await _repository.createRecord(
           productType: _selectedProductType,
-          productCode: _productCodeController.text,
+          productCode: _productCodeController.text.trim(),
+          quantity: int.parse(_quantityController.text),
+          date: _selectedDateTime,
+          isRework: _isRework,
         );
 
-        await _dbService.createProductionRecord(record);
-        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -101,7 +93,7 @@ class _ProductionRecordScreenState extends State<ProductionRecordScreen> {
               duration: Duration(seconds: 2),
             ),
           );
-          Navigator.pop(context);
+          Navigator.pop(context, true);
         }
       } catch (e) {
         if (mounted) {
@@ -167,76 +159,83 @@ class _ProductionRecordScreenState extends State<ProductionRecordScreen> {
                         ),
                       ),
                       const SizedBox(height: 20),
-                      
+
                       // 产品类型选择
                       DropdownButtonFormField<ProductType>(
                         value: _selectedProductType,
                         decoration: InputDecoration(
                           labelText: '产品类型',
-                          prefixIcon: const Icon(Icons.category, color: Colors.blue),
+                          prefixIcon:
+                              const Icon(Icons.category, color: Colors.blue),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: Colors.blue, width: 2),
+                            borderSide:
+                                const BorderSide(color: Colors.blue, width: 2),
                           ),
                         ),
                         items: ProductType.values.map((ProductType type) {
                           return DropdownMenuItem<ProductType>(
                             value: type,
-                            child: Text(productTypeChDisplayNames[type] ?? '其他'),
+                            child:
+                                Text(productTypeChDisplayNames[type] ?? '其他'),
                           );
                         }).toList(),
                         onChanged: (ProductType? newValue) {
-                          print(newValue);
                           setState(() {
                             _selectedProductType = newValue!;
                           });
                         },
                         validator: (value) => value == null ? '请选择产品类型' : null,
                       ),
-                      
+
                       const SizedBox(height: 16),
-                      
+
                       // 产品编号输入
                       TextFormField(
                         controller: _productCodeController,
                         decoration: InputDecoration(
                           labelText: '产品编号',
                           hintText: '请输入产品编号',
-                          prefixIcon: const Icon(Icons.qr_code, color: Colors.blue),
+                          prefixIcon:
+                              const Icon(Icons.qr_code, color: Colors.blue),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: Colors.blue, width: 2),
+                            borderSide:
+                                const BorderSide(color: Colors.blue, width: 2),
                           ),
                         ),
                         validator: (value) {
-                          if (value == null || value.isEmpty) {
+                          if (value == null || value.trim().isEmpty) {
                             return '请输入产品编号';
                           }
                           return null;
                         },
                       ),
-                      
+
                       const SizedBox(height: 16),
-                      
+
                       // 数量输入
                       TextFormField(
                         controller: _quantityController,
                         decoration: InputDecoration(
                           labelText: '生产数量',
                           hintText: '请输入生产数量',
-                          prefixIcon: const Icon(Icons.production_quantity_limits, color: Colors.blue),
+                          prefixIcon: const Icon(
+                              Icons.production_quantity_limits,
+                              color: Colors.blue),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: Colors.blue, width: 2),
+                            borderSide:
+                                const BorderSide(color: Colors.blue, width: 2),
                           ),
                         ),
                         keyboardType: TextInputType.number,
@@ -244,19 +243,72 @@ class _ProductionRecordScreenState extends State<ProductionRecordScreen> {
                           if (value == null || value.isEmpty) {
                             return '请输入生产数量';
                           }
-                          if (int.tryParse(value) == null || int.parse(value) <= 0) {
+                          if (int.tryParse(value) == null ||
+                              int.parse(value) <= 0) {
                             return '请输入有效的数字';
                           }
                           return null;
                         },
                       ),
+                      const SizedBox(height: 16),
+
+                      // 返工开关
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey[300]!),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _isRework
+                                  ? Icons.refresh
+                                  : Icons.check_circle_outline,
+                              color: _isRework ? Colors.orange : Colors.blue,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    '返工状态',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  Text(
+                                    _isRework ? '当前为返工记录' : '当前为正常生产记录',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Switch(
+                              value: _isRework,
+                              onChanged: (bool value) {
+                                setState(() {
+                                  _isRework = value;
+                                });
+                              },
+                              activeColor: Colors.orange,
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 16),
-              
+
               // 时间选择卡片
               Card(
                 elevation: 2,
@@ -277,7 +329,6 @@ class _ProductionRecordScreenState extends State<ProductionRecordScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      
                       InkWell(
                         onTap: _selectDateTime,
                         borderRadius: BorderRadius.circular(8),
@@ -304,7 +355,8 @@ class _ProductionRecordScreenState extends State<ProductionRecordScreen> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      DateFormat('yyyy年MM月dd日 HH:mm').format(_selectedDateTime),
+                                      DateFormat('yyyy年MM月dd日 HH:mm')
+                                          .format(_selectedDateTime),
                                       style: const TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w500,
@@ -313,7 +365,8 @@ class _ProductionRecordScreenState extends State<ProductionRecordScreen> {
                                   ],
                                 ),
                               ),
-                              const Icon(Icons.keyboard_arrow_right, color: Colors.grey),
+                              const Icon(Icons.keyboard_arrow_right,
+                                  color: Colors.grey),
                             ],
                           ),
                         ),
@@ -322,9 +375,9 @@ class _ProductionRecordScreenState extends State<ProductionRecordScreen> {
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 32),
-              
+
               // 保存按钮
               SizedBox(
                 height: 50,
@@ -344,7 +397,8 @@ class _ProductionRecordScreenState extends State<ProductionRecordScreen> {
                           height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         )
                       : const Text(

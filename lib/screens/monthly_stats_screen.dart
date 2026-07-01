@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../services/database_service.dart';
 import '../models/production_record_model.dart';
 import '../models/product_model.dart';
+import '../repositories/production_repository.dart';
+import '../utils/production_grouping.dart';
 import 'date_detail_screen.dart';
 import 'production_record_screen.dart';
 
@@ -14,7 +15,7 @@ class MonthlyStatsScreen extends StatefulWidget {
 }
 
 class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
-  final DatabaseService _databaseService = DatabaseService.instance;
+  final ProductionRepository _repository = ProductionRepository.instance;
   List<ProductionRecord> _monthlyRecords = [];
   Map<ProductType, List<ProductionRecord>> _groupedRecords = {};
   Map<ProductType, bool> _expandedStates = {};
@@ -34,18 +35,12 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
     });
 
     try {
-      // 获取整个月的记录
-      final startDate = DateTime(_selectedMonth.year, _selectedMonth.month, 1);
-      final endDate = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0);
-      
-      List<ProductionRecord> allRecords = [];
-      for (int day = 1; day <= endDate.day; day++) {
-        final date = DateTime(_selectedMonth.year, _selectedMonth.month, day);
-        final dayRecords = await _databaseService.getProductionRecordsByDate(date);
-        allRecords.addAll(dayRecords);
-      }
-      
-      _groupRecordsByType(allRecords);
+      final records = await _repository.getMonthlyProductionRecords(
+        _selectedMonth.year,
+        _selectedMonth.month,
+      );
+      if (!mounted) return;
+      _groupRecordsByType(records);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -63,21 +58,15 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
 
   void _groupRecordsByType(List<ProductionRecord> records) {
     _monthlyRecords = records;
-    _groupedRecords.clear();
-    
-    for (final record in records) {
-      if (!_groupedRecords.containsKey(record.productType)) {
-        _groupedRecords[record.productType] = [];
-        _expandedStates[record.productType] = false;
-      }
-      _groupedRecords[record.productType]!.add(record);
+    _groupedRecords = groupRecordsByProductType(records);
+    for (final productType in _groupedRecords.keys) {
+      _expandedStates.putIfAbsent(productType, () => false);
     }
-    
+
     if (mounted) {
       setState(() {});
     }
   }
-
 
   Future<void> _selectMonthWithCalendar(BuildContext context) async {
     // 显示年份选择器
@@ -122,20 +111,20 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                 itemCount: 12,
                 itemBuilder: (context, index) {
                   final month = index + 1;
-                  final isSelected = selectedYear == _selectedMonth.year && 
-                                   month == _selectedMonth.month;
+                  final isSelected = selectedYear == _selectedMonth.year &&
+                      month == _selectedMonth.month;
                   return InkWell(
                     onTap: () => Navigator.pop(context, month),
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: isSelected 
-                            ? Colors.blue.shade600 
+                        color: isSelected
+                            ? Colors.blue.shade600
                             : Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: isSelected 
-                              ? Colors.blue.shade600 
+                          color: isSelected
+                              ? Colors.blue.shade600
                               : Colors.grey.shade300,
                         ),
                       ),
@@ -143,11 +132,11 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                         child: Text(
                           '${month}月',
                           style: TextStyle(
-                            color: isSelected 
-                                ? Colors.white 
+                            color: isSelected
+                                ? Colors.white
                                 : Colors.grey.shade700,
-                            fontWeight: isSelected 
-                                ? FontWeight.bold 
+                            fontWeight: isSelected
+                                ? FontWeight.bold
                                 : FontWeight.normal,
                             fontSize: 16,
                           ),
@@ -200,7 +189,8 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
 
   void _toggleProductCodeExpanded(String productCode) {
     setState(() {
-      _productCodeExpandedStates[productCode] = !(_productCodeExpandedStates[productCode] ?? false);
+      _productCodeExpandedStates[productCode] =
+          !(_productCodeExpandedStates[productCode] ?? false);
     });
   }
 
@@ -220,7 +210,7 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
           ),
         ],
       ),
-      child:  Row(
+      child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Container(
@@ -238,7 +228,27 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
               ),
             ),
           ),
-
+          Visibility(
+            visible: record.isRework,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.blue.shade50, Colors.blue.shade100],
+                ),
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: const Text(
+                '返工',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
@@ -262,14 +272,16 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
     );
   }
 
-  Widget _buildProductCodeGroup(String productCode, List<ProductionRecord> records) {
+  Widget _buildProductCodeGroup(
+      String productCode, List<ProductionRecord> records) {
     final isExpanded = _productCodeExpandedStates[productCode] ?? false;
-    final totalQuantity = records.fold<int>(0, (sum, record) => sum + record.quantity);
-    
+    final totalQuantity =
+        records.fold<int>(0, (sum, record) => sum + record.quantity);
+    final hasRemark = records.any((e) => e.isRework);
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       padding: const EdgeInsets.only(bottom: 0),
-
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -289,7 +301,7 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
             onTap: () => _toggleProductCodeExpanded(productCode),
             borderRadius: BorderRadius.circular(16),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16,vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
                   Container(
@@ -323,7 +335,8 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
                                 color: Colors.blue.shade50,
                                 borderRadius: BorderRadius.circular(8),
@@ -340,10 +353,14 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                             ),
                             const SizedBox(width: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
-                                  colors: [Colors.orange.shade400, Colors.orange.shade600],
+                                  colors: [
+                                    Colors.orange.shade400,
+                                    Colors.orange.shade600
+                                  ],
                                 ),
                                 borderRadius: BorderRadius.circular(8),
                               ),
@@ -356,13 +373,42 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                                 ),
                               ),
                             ),
+                            const SizedBox(width: 8),
+                            Visibility(
+                              visible: hasRemark,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.blue.shade50,
+                                      Colors.blue.shade100
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(15),
+                                  border:
+                                      Border.all(color: Colors.blue.shade200),
+                                ),
+                                child: const Text(
+                                  '返工',
+                                  style: TextStyle(
+                                    color: Colors.black,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ],
                     ),
                   ),
                   Icon(
-                    isExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                    isExpanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
                     color: Colors.blue.shade600,
                     size: 28,
                   ),
@@ -374,7 +420,8 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 8.0),
               child: Column(
-                children: records.map((record) => _buildRecordItem(record)).toList(),
+                children:
+                    records.map((record) => _buildRecordItem(record)).toList(),
               ),
             ),
         ],
@@ -382,19 +429,15 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
     );
   }
 
-  Widget _buildProductTypeSection(ProductType productType, List<ProductionRecord> records) {
+  Widget _buildProductTypeSection(
+      ProductType productType, List<ProductionRecord> records) {
     final isExpanded = _expandedStates[productType] ?? false;
-    final totalQuantity = records.fold<int>(0, (sum, record) => sum + record.quantity);
-    
+    final totalQuantity =
+        records.fold<int>(0, (sum, record) => sum + record.quantity);
+
     // 按产品编号分组
-    final Map<String, List<ProductionRecord>> groupedByCode = {};
-    for (final record in records) {
-      if (!groupedByCode.containsKey(record.productCode)) {
-        groupedByCode[record.productCode] = [];
-      }
-      groupedByCode[record.productCode]!.add(record);
-    }
-    
+    final groupedByCode = groupRecordsByProductCode(records);
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
@@ -453,7 +496,7 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                         Row(
                           children: [
                             Text(
-                              productTypeChDisplayNames[productType]??'其他' ,
+                              productTypeChDisplayNames[productType] ?? '其他',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 18,
@@ -461,12 +504,15 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                               ),
                             ),
                             const SizedBox(width: 8),
-
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
-                                  colors: [Colors.orange.shade400, Colors.orange.shade600],
+                                  colors: [
+                                    Colors.orange.shade400,
+                                    Colors.orange.shade600
+                                  ],
                                 ),
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -479,7 +525,6 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                                 ),
                               ),
                             ),
-
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -487,7 +532,8 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                           runSpacing: 10,
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
                                 color: Colors.blue.shade100,
                                 borderRadius: BorderRadius.circular(12),
@@ -504,11 +550,13 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                             ),
                             const SizedBox(width: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
                                 color: Colors.green.shade100,
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.green.shade300),
+                                border:
+                                    Border.all(color: Colors.green.shade300),
                               ),
                               child: Text(
                                 '${records.length} 条记录',
@@ -526,7 +574,9 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                     ),
                   ),
                   Icon(
-                    isExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                    isExpanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
                     color: Colors.blue.shade600,
                     size: 32,
                   ),
@@ -539,7 +589,8 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
               padding: const EdgeInsets.only(bottom: 0),
               child: Column(
                 children: groupedByCode.entries
-                    .map((entry) => _buildProductCodeGroup(entry.key, entry.value))
+                    .map((entry) =>
+                        _buildProductCodeGroup(entry.key, entry.value))
                     .toList(),
               ),
             ),
@@ -549,7 +600,7 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
   }
 
   IconData _getProductTypeIcon(ProductType productType) {
- switch (productType) {
+    switch (productType) {
       case ProductType.clothes:
         return Icons.checkroom_rounded;
       case ProductType.pants:
@@ -560,15 +611,15 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
         return Icons.woman_rounded;
 
       case ProductType.unknown:
-      default:
         return Icons.category_rounded;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final totalQuantity = _monthlyRecords.fold<int>(0, (sum, record) => sum + record.quantity);
-    
+    final totalQuantity =
+        _monthlyRecords.fold<int>(0, (sum, record) => sum + record.quantity);
+
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
@@ -590,8 +641,15 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: TextButton(
-              child:  Text('天',style: TextStyle(fontSize: 20,fontWeight:FontWeight.bold,color:Colors.blue.shade700),),
-              style: ButtonStyle(backgroundColor: MaterialStateProperty.all(Colors.black12)),
+              child: Text(
+                '天',
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade700),
+              ),
+              style: ButtonStyle(
+                  backgroundColor: MaterialStateProperty.all(Colors.black12)),
               onPressed: () => _selectDate(context),
               // tooltip: '选择日期查看详情',
             ),
@@ -732,7 +790,8 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                             ],
                           ),
                           child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade500),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.blue.shade500),
                             strokeWidth: 3,
                           ),
                         ),
@@ -796,7 +855,8 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
                     : ListView(
                         padding: const EdgeInsets.only(bottom: 100),
                         children: _groupedRecords.entries
-                            .map((entry) => _buildProductTypeSection(entry.key, entry.value))
+                            .map((entry) => _buildProductTypeSection(
+                                entry.key, entry.value))
                             .toList(),
                       ),
           ),
@@ -818,7 +878,8 @@ class _MonthlyStatsScreenState extends State<MonthlyStatsScreen> {
           onPressed: () async {
             final result = await Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const ProductionRecordScreen()),
+              MaterialPageRoute(
+                  builder: (context) => const ProductionRecordScreen()),
             );
             if (result == true) {
               _loadMonthlyRecords();
