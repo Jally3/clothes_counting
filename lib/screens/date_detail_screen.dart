@@ -3,6 +3,7 @@ import '../models/production_record_model.dart';
 import '../models/product_model.dart';
 import '../repositories/production_repository.dart';
 import '../utils/production_grouping.dart';
+import '../widgets/unit_price_edit_dialog.dart';
 import 'production_record_screen.dart';
 
 class DateDetailScreen extends StatefulWidget {
@@ -18,9 +19,26 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
   final ProductionRepository _repository = ProductionRepository.instance;
   List<ProductionRecord> _records = [];
   Map<ProductType, List<ProductionRecord>> _groupedRecords = {};
-  Map<ProductType, bool> _expandedStates = {};
-  Map<String, bool> _productCodeExpandedStates = {};
+  final Map<ProductType, bool> _expandedStates = {};
+  final Map<String, bool> _productCodeExpandedStates = {};
   bool _isLoading = true;
+
+  String get _shortDateTitle =>
+      '${widget.selectedDate.month}月${widget.selectedDate.day}日统计';
+
+  String get _fullDateText =>
+      '${widget.selectedDate.year}年${widget.selectedDate.month}月${widget.selectedDate.day}日';
+
+  DateTime get _initialRecordDateTime {
+    final now = DateTime.now();
+    return DateTime(
+      widget.selectedDate.year,
+      widget.selectedDate.month,
+      widget.selectedDate.day,
+      now.hour,
+      now.minute,
+    );
+  }
 
   @override
   void initState() {
@@ -73,6 +91,44 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
       _productCodeExpandedStates[productCode] =
           !(_productCodeExpandedStates[productCode] ?? false);
     });
+  }
+
+  Future<void> _editProductCodePrice({
+    required ProductType productType,
+    required String productCode,
+    required double currentPrice,
+  }) async {
+    final newPrice = await showUnitPriceEditDialog(
+      context: context,
+      productCode: productCode,
+      initialPrice: currentPrice,
+    );
+    if (!mounted || newPrice == null) return;
+
+    try {
+      await _repository.updateProductPrice(
+        productType: productType,
+        productCode: productCode,
+        price: newPrice,
+      );
+      if (!mounted) return;
+      await _loadRecords();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('单价已更新'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('单价更新失败：$e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Widget _buildRecordItem(ProductionRecord record) {
@@ -155,11 +211,13 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
     );
   }
 
-  Widget _buildProductCodeGroup(
-      String productCode, List<ProductionRecord> records) {
+  Widget _buildProductCodeGroup(String productCode,
+      List<ProductionRecord> records, ProductType productType) {
     final isExpanded = _productCodeExpandedStates[productCode] ?? false;
     final totalQuantity =
         records.fold<int>(0, (sum, record) => sum + record.quantity);
+    final unitPrice = records.isEmpty ? 0.0 : records.first.unitPrice;
+    final totalPrice = totalQuantity * unitPrice;
     final hasRemark = records.any((e) => e.isRework);
 
     return Container(
@@ -232,7 +290,9 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
                             ),
                           ),
                           const SizedBox(height: 6),
-                          Row(
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
                             children: [
                               Container(
                                 padding: const EdgeInsets.symmetric(
@@ -252,7 +312,6 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 2),
@@ -282,9 +341,58 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
                                   ),
                                 ),
                               ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border:
+                                      Border.all(color: Colors.blue.shade200),
+                                ),
+                                child: Text(
+                                  '单价: ¥${_formatMoney(unitPrice)}',
+                                  style: TextStyle(
+                                    color: Colors.blue.shade700,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade100,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border:
+                                      Border.all(color: Colors.blue.shade300),
+                                ),
+                                child: Text(
+                                  '总价: ¥${_formatMoney(totalPrice)}',
+                                  style: TextStyle(
+                                    color: Colors.blue.shade800,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '编辑单价',
+                      onPressed: () => _editProductCodePrice(
+                        productType: productType,
+                        productCode: productCode,
+                        currentPrice: unitPrice,
+                      ),
+                      icon: Icon(
+                        Icons.edit_note_rounded,
+                        color: Colors.indigo.shade600,
+                        size: 24,
                       ),
                     ),
                     Container(
@@ -526,8 +634,8 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
               padding: const EdgeInsets.only(top: 0, bottom: 0),
               child: Column(
                 children: recordsByCode.entries
-                    .map((entry) =>
-                        _buildProductCodeGroup(entry.key, entry.value))
+                    .map((entry) => _buildProductCodeGroup(
+                        entry.key, entry.value, productType))
                     .toList(),
               ),
             ),
@@ -552,6 +660,13 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
     }
   }
 
+  String _formatMoney(double value) {
+    if (value == value.roundToDouble()) {
+      return value.toStringAsFixed(0);
+    }
+    return value.toStringAsFixed(2);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -561,7 +676,7 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
         backgroundColor: Colors.transparent,
         foregroundColor: Colors.blue.shade800,
         title: Text(
-          '${widget.selectedDate.year}年${widget.selectedDate.month}月${widget.selectedDate.day}日详情',
+          _shortDateTitle,
           style: TextStyle(
             fontWeight: FontWeight.bold,
             color: Colors.blue.shade800,
@@ -618,13 +733,27 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
                       ),
                     ),
                     const SizedBox(width: 16),
-                    Text(
-                      '${widget.selectedDate.year}年${widget.selectedDate.month}月${widget.selectedDate.day}日',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                        color: Colors.white,
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '日期概览',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _fullDateText,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 14,
+                            color: Colors.white.withOpacity(0.82),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -777,7 +906,10 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
             await Navigator.push(
               context,
               MaterialPageRoute(
-                  builder: (context) => const ProductionRecordScreen()),
+                builder: (context) => ProductionRecordScreen(
+                  initialDateTime: _initialRecordDateTime,
+                ),
+              ),
             );
             if (mounted) {
               _loadRecords();

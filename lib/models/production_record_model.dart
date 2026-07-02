@@ -21,6 +21,7 @@ class ProductionRecord {
   final ProductType productType; // 产品类型，冗余存储方便查询，或从Product获取
   final String productCode; // 产品编号/款式，冗余存储方便查询
   final int quantity; // 完成数量
+  final double unitPrice; // 编号单价，来自产品表，方便列表展示和同步
   final DateTime date; // 记录日期
   final bool isRework; // 是否为返工，默认为false
   final String? clientUuid;
@@ -39,6 +40,7 @@ class ProductionRecord {
     required this.productType,
     required this.productCode,
     required this.quantity,
+    this.unitPrice = 0,
     required this.date,
     this.isRework = false, // 默认为false
     this.clientUuid,
@@ -87,6 +89,9 @@ class ProductionRecord {
       productType: productTypeFromString(map['productType'] as String),
       productCode: map['productCode'] as String,
       quantity: map['quantity'] as int,
+      unitPrice: (map['unitPrice'] as num?)?.toDouble() ??
+          (map['price'] as num?)?.toDouble() ??
+          0,
       date: DateTime.parse(map['date'] as String), // 从字符串解析DateTime
       isRework: (map['isRework'] as int?) == 1, // 从int转换为bool
       clientUuid: map['clientUuid'] as String?,
@@ -111,6 +116,7 @@ class ProductionRecord {
     int? retryCount,
     DateTime? deletedAt,
     DateTime? updatedAt,
+    double? unitPrice,
   }) {
     return ProductionRecord(
       id: id ?? this.id,
@@ -118,6 +124,7 @@ class ProductionRecord {
       productType: productType,
       productCode: productCode,
       quantity: quantity,
+      unitPrice: unitPrice ?? this.unitPrice,
       date: date,
       isRework: isRework,
       clientUuid: clientUuid ?? this.clientUuid,
@@ -137,6 +144,7 @@ class ProductionRecord {
       'productType': productTypeDisplayNames[productType],
       'productCode': productCode,
       'quantity': quantity,
+      'unitPrice': unitPrice,
       'date': date.toIso8601String(),
       'isRework': isRework,
       'updatedAt': (updatedAt ?? date).toIso8601String(),

@@ -12,6 +12,7 @@ void main() {
       productType: ProductType.clothes,
       productCode: '#A100',
       quantity: 12,
+      unitPrice: 8.5,
       date: DateTime(2026, 7, 1, 9, 30),
       isRework: true,
       clientUuid: 'client-1',
@@ -25,8 +26,22 @@ void main() {
     expect(payload['productType'], 'clothes');
     expect(payload['productCode'], '#A100');
     expect(payload['quantity'], 12);
+    expect(payload['unitPrice'], 8.5);
     expect(payload['isRework'], isTrue);
     expect(payload['deletedAt'], isNull);
+  });
+
+  test('Product maps price as product-code unit price', () {
+    final product = Product(
+      id: 1,
+      type: ProductType.clothes,
+      productCode: '#A100',
+      price: 9.9,
+    );
+
+    final restored = Product.fromMap(product.toMap());
+
+    expect(restored.price, 9.9);
   });
 
   test('groupRecordsByProductType groups records without mutating them', () {

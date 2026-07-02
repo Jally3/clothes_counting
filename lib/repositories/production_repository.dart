@@ -21,6 +21,7 @@ class ProductionRepository {
     required ProductType productType,
     required String productCode,
     required int quantity,
+    required double unitPrice,
     required DateTime date,
     required bool isRework,
   }) async {
@@ -28,6 +29,7 @@ class ProductionRepository {
       productType: productType,
       productCode: productCode,
       quantity: quantity,
+      unitPrice: unitPrice,
       date: date,
       isRework: isRework,
     );
@@ -63,5 +65,23 @@ class ProductionRepository {
       int year, int month) {
     unawaited(_syncService.syncPendingRecords());
     return _databaseService.getMonthlyProductionRecords(year, month);
+  }
+
+  Future<Product?> getProductByCode(
+      String productCode, ProductType productType) {
+    return _databaseService.getProductByCode(productCode, productType);
+  }
+
+  Future<void> updateProductPrice({
+    required ProductType productType,
+    required String productCode,
+    required double price,
+  }) async {
+    await _databaseService.updateProductPriceByCode(
+      productType: productType,
+      productCode: productCode,
+      price: price,
+    );
+    unawaited(_syncService.syncPendingRecords());
   }
 }

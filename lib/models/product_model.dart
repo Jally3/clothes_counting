@@ -1,10 +1,10 @@
 // 定义产品类型枚举，方便管理和使用
 enum ProductType {
-  clothes,    // 衣服
-  pants,      // 裤子
-  dress,      // 连衣裙
-  hat,        // 帽子
-  unknown     // 未知类型，用于兼容或错误处理
+  clothes, // 衣服
+  pants, // 裤子
+  dress, // 连衣裙
+  hat, // 帽子
+  unknown // 未知类型，用于兼容或错误处理
 }
 
 // 产品类型到显示名称的映射
@@ -27,7 +27,8 @@ const Map<ProductType, String> productTypeChDisplayNames = {
 // 显示名称到产品类型的映射 (用于从字符串转换)
 ProductType productTypeFromString(String typeString) {
   return productTypeDisplayNames.entries
-      .firstWhere((entry) => entry.value == typeString, orElse: () => const MapEntry(ProductType.unknown, '其他'))
+      .firstWhere((entry) => entry.value == typeString,
+          orElse: () => const MapEntry(ProductType.unknown, '其他'))
       .key;
 }
 
@@ -35,12 +36,14 @@ class Product {
   final int? id; // 将id改为int?类型，因为数据库是INTEGER PRIMARY KEY AUTOINCREMENT
   final ProductType type;
   final String productCode; // 产品编号/款式
+  final double price; // 编号单价
   // 可以添加其他产品相关属性，如颜色、尺码等
 
   Product({
     this.id, // id现在是可选的
     required this.type,
     required this.productCode,
+    this.price = 0,
   });
 
   // 便捷获取产品类型的显示名称
@@ -52,6 +55,7 @@ class Product {
       'id': id,
       'productType': type.toString().split('.').last, // 将枚举转换为字符串存储
       'productCode': productCode, // 数据库中是productCode，这里对应styleCode
+      'price': price,
     };
   }
 
@@ -61,15 +65,17 @@ class Product {
       id: map['id'] as int?,
       type: productTypeFromString(map['productType'] as String),
       productCode: map['productCode'] as String, // 从productCode字段读取
+      price: (map['price'] as num?)?.toDouble() ?? 0,
     );
   }
 
   // 用于创建Product副本，通常用于更新id
-  Product copy({int? id}) {
+  Product copy({int? id, double? price}) {
     return Product(
       id: id ?? this.id,
       type: type,
       productCode: productCode,
+      price: price ?? this.price,
     );
   }
 }

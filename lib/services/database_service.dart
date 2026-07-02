@@ -11,12 +11,13 @@ class DatabaseService {
   static Database? _database;
 
   // 数据库版本号，用于未来升级
-  static const int _databaseVersion = 4;
+  static const int _databaseVersion = 5;
   static const String _recordSelectColumns = '''
         pr.id,
         pr.productId,
         p.productType,
         p.productCode,
+        p.price AS unitPrice,
         pr.quantity,
         pr.date,
         pr.operatorId,
@@ -79,6 +80,9 @@ class DatabaseService {
       await _backfillSyncFields(db);
       await _createIndexes(db);
       await _ensureDeviceId(db);
+    }
+    if (oldVersion < 5) {
+      await _addProductPriceColumn(db);
     }
   }
 
@@ -186,6 +190,10 @@ class DatabaseService {
     await _addColumnIfMissing(db, 'production_records', 'updatedAt', 'TEXT');
   }
 
+  Future<void> _addProductPriceColumn(Database db) async {
+    await _addColumnIfMissing(db, 'products', 'price', 'REAL DEFAULT 0.0');
+  }
+
   Future<void> _backfillSyncFields(Database db) async {
     final now = DateTime.now().toIso8601String();
     await db.rawUpdate('''
@@ -274,6 +282,44 @@ class DatabaseService {
       limit: 1,
     );
     return maps.isNotEmpty ? Product.fromMap(maps.first) : null;
+  }
+
+  Future<void> updateProductPriceByCode({
+    required String productCode,
+    required ProductType productType,
+    required double price,
+  }) async {
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      final existing = await txn.query(
+        'products',
+        where: 'productCode = ? AND productType = ?',
+        whereArgs: [productCode, productTypeDisplayNames[productType]],
+        limit: 1,
+      );
+      if (existing.isEmpty) {
+        throw StateError('未找到产品编号：$productCode');
+      }
+
+      final product = Product.fromMap(existing.first);
+      await txn.update(
+        'products',
+        {'price': price},
+        where: 'id = ?',
+        whereArgs: [product.id],
+      );
+
+      await txn.update(
+        'production_records',
+        {
+          'syncStatus': SyncStatus.pending.name,
+          'syncError': null,
+          'updatedAt': DateTime.now().toIso8601String(),
+        },
+        where: 'productId = ? AND deletedAt IS NULL',
+        whereArgs: [product.id],
+      );
+    });
   }
 
   Future<List<Product>> getAllProducts({bool activeOnly = true}) async {
@@ -597,6 +643,7 @@ class DatabaseService {
     required ProductType productType,
     required String productCode,
     required int quantity,
+    required double unitPrice,
     required DateTime date,
     required bool isRework,
   }) async {
@@ -611,9 +658,24 @@ class DatabaseService {
 
       final Product product;
       if (existing.isNotEmpty) {
-        product = Product.fromMap(existing.first);
+        final existingProduct = Product.fromMap(existing.first);
+        if (existingProduct.price != unitPrice) {
+          await txn.update(
+            'products',
+            {'price': unitPrice},
+            where: 'id = ?',
+            whereArgs: [existingProduct.id],
+          );
+          product = existingProduct.copy(price: unitPrice);
+        } else {
+          product = existingProduct;
+        }
       } else {
-        final newProduct = Product(type: productType, productCode: productCode);
+        final newProduct = Product(
+          type: productType,
+          productCode: productCode,
+          price: unitPrice,
+        );
         final productId = await txn.insert('products', newProduct.toMap());
         product = newProduct.copy(id: productId);
       }
@@ -624,6 +686,7 @@ class DatabaseService {
         productType: productType,
         productCode: productCode,
         quantity: quantity,
+        unitPrice: product.price,
         date: date,
         isRework: isRework,
         clientUuid: _createClientUuid(),
