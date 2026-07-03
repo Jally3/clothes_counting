@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../extensions/double_extension.dart';
 import '../models/production_record_model.dart';
 import '../models/product_model.dart';
 import '../utils/production_grouping.dart';
@@ -1124,10 +1125,7 @@ IconData _getProductTypeIcon(ProductType productType) {
 }
 
 String _formatMoney(double value) {
-  if (value == value.roundToDouble()) {
-    return value.toStringAsFixed(0);
-  }
-  return value.toStringAsFixed(2);
+  return value.toTrimmedPriceString();
 }
 
 class _StatsColors {

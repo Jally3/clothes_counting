@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import '../extensions/double_extension.dart';
 import '../models/product_model.dart';
 import '../repositories/production_repository.dart';
 
@@ -62,10 +63,7 @@ class _ProductionRecordScreenState extends State<ProductionRecordScreen> {
   }
 
   String _formatPriceInput(double value) {
-    if (value == value.roundToDouble()) {
-      return value.toStringAsFixed(0);
-    }
-    return value.toStringAsFixed(2);
+    return value.toTrimmedPriceString();
   }
 
   Future<void> _selectDateTime() async {

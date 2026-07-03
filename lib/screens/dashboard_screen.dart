@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../extensions/double_extension.dart';
 import '../models/production_record_model.dart';
 import '../models/product_model.dart';
 import '../repositories/production_repository.dart';
@@ -525,7 +526,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     )
                   else
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(18, 18, 18, 116),
+                      padding: const EdgeInsets.fromLTRB(18, 12, 18, 116),
                       sliver: SliverList(
                         delegate: SliverChildBuilderDelegate(
                           (context, index) {
@@ -572,7 +573,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               borderRadius: BorderRadius.circular(18),
               onTap: () => _toggleExpanded(productType),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 18, 18),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                 child: Row(
                   children: [
                     _SoftIcon(
@@ -595,9 +596,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            '${records.length} 条记录  ·  ${recordsByCode.length} 个编号',
+                            '${recordsByCode.length} 个编号',
                             style: const TextStyle(
-                              fontSize: 14,
+                              fontSize: 12,
                               color: _DashboardColors.textSecondary,
                               fontWeight: FontWeight.w500,
                             ),
@@ -698,8 +699,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final latestRecord = records.isEmpty ? null : records.first;
 
     return Container(
-      margin: const EdgeInsets.only(top: 0),
-      padding: const EdgeInsets.fromLTRB(16, 16, 10, 16),
+      margin: const EdgeInsets.only(top: 0, bottom: 8),
+      padding: const EdgeInsets.fromLTRB(16, 12, 10, 12),
       decoration: BoxDecoration(
         color: _DashboardColors.detailSurface,
         borderRadius: BorderRadius.circular(18),
@@ -715,41 +716,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                   mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          productCode,
-                          style: const TextStyle(
-                            fontSize: 26,
-                            height: 1.1,
-                            color: _DashboardColors.textPrimary,
-                            fontWeight: FontWeight.w800,
+                        Expanded(
+                          child: Text(
+                            productCode,
+                            maxLines: 1,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              height: 1.1,
+                              color: _DashboardColors.textPrimary,
+                              fontWeight: FontWeight.w800,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ),
                         if (hasRework) ...[
-                          const SizedBox(height: 10),
                           const _ReworkBadge(hasRework: true),
                         ],
                       ],
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 10),
                     _CodeStatsPanel(
                       quantity: totalQuantity,
                       totalPrice: totalPrice,
                       formatMoney: _formatMoney,
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 12),
                     _CodeMetaRow(
                       latestRecord: latestRecord,
                       unitPrice: unitPrice,
                       formatMoney: _formatMoney,
                     ),
-
                   ],
                 ),
               ),
               const SizedBox(width: 4),
-
               Column(
                 children: [
                   _ActionButton(
@@ -776,11 +778,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ? Icons.keyboard_arrow_up_rounded
                         : Icons.keyboard_arrow_down,
                     tooltip: isExpanded ? '收起记录' : '展开记录',
+                    badgeLabel: records.length > 1
+                        ? _formatRecordCountBadge(records.length)
+                        : null,
                     onTap: () => _toggleProductCodeExpanded(expansionKey),
                   ),
                 ],
               ),
-
             ],
           ),
           if (isExpanded) ...[
@@ -789,16 +793,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: records
                   .map(
                     (record) => _RecordRow(
-                  record: record,
-                  formatMoney: _formatMoney,
-                  syncLabel: _getSyncLabel(record.syncStatus),
-                  onDelete: () => _showDeleteConfirmDialog(record),
-                ),
-              )
+                      record: record,
+                      formatMoney: _formatMoney,
+                      syncLabel: _getSyncLabel(record.syncStatus),
+                      onDelete: () => _showDeleteConfirmDialog(record),
+                    ),
+                  )
                   .toList(),
             ),
           ],
-
         ],
       ),
     );
@@ -835,10 +838,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   String _formatMoney(double value) {
-    if (value == value.roundToDouble()) {
-      return value.toStringAsFixed(0);
-    }
-    return value.toStringAsFixed(2);
+    return value.toTrimmedPriceString();
+  }
+
+  String _formatRecordCountBadge(int count) {
+    return count > 99 ? '99+' : '$count';
   }
 
   static String _formatTime(DateTime value) {
@@ -1050,7 +1054,7 @@ class _SummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _SurfaceCard(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1098,7 +1102,7 @@ class _SummaryCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 26),
+          const SizedBox(height: 18),
           Row(
             children: [
               Expanded(
@@ -1147,13 +1151,14 @@ class _HeroMetric extends StatelessWidget {
     return Column(
       children: [
         Text.rich(
+          textAlign: TextAlign.center,
           TextSpan(
             children: [
               TextSpan(
                 text: value,
                 style: TextStyle(
                   color: color,
-                  fontSize: 34,
+                  fontSize: 32,
                   height: 1,
                   fontWeight: FontWeight.w800,
                 ),
@@ -1281,8 +1286,8 @@ class _CodeStatsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 88,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.5),
         borderRadius: BorderRadius.circular(14),
@@ -1300,7 +1305,7 @@ class _CodeStatsPanel extends StatelessWidget {
           ),
           Container(
             width: 1,
-            height: 72,
+            height: 58,
             color: _DashboardColors.divider,
           ),
           Expanded(
@@ -1343,7 +1348,7 @@ class _CodeStatItem extends StatelessWidget {
                   text: value,
                   style: TextStyle(
                     color: color,
-                    fontSize: 25,
+                    fontSize: 18,
                     height: 1,
                     fontWeight: FontWeight.w800,
                   ),
@@ -1353,22 +1358,13 @@ class _CodeStatItem extends StatelessWidget {
                     text: ' $suffix',
                     style: TextStyle(
                       color: color,
-                      fontSize: 14,
+                      fontSize: 12,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
               ],
             ),
             maxLines: 1,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: const TextStyle(
-            color: _DashboardColors.textSecondary,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
           ),
         ),
       ],
@@ -1474,11 +1470,13 @@ class _ActionButton extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.onTap,
+    this.badgeLabel,
   });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
+  final String? badgeLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -1493,9 +1491,42 @@ class _ActionButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           onTap: onTap,
           child: SizedBox(
-            width: 52,
-            height: 52,
-            child: Icon(icon, color: _DashboardColors.primary, size: 30),
+            width: 36,
+            height: 36,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                Icon(icon, color: _DashboardColors.primary, size: 24),
+                if (badgeLabel != null)
+                  Positioned(
+                    top: -5,
+                    right: -5,
+                    child: Container(
+                      constraints: const BoxConstraints(
+                        minWidth: 18,
+                        minHeight: 18,
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      decoration: BoxDecoration(
+                        color: _DashboardColors.primary,
+                        borderRadius: BorderRadius.circular(9),
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        badgeLabel!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          height: 1,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

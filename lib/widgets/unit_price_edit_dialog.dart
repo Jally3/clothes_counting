@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../extensions/double_extension.dart';
+
 Future<double?> showUnitPriceEditDialog({
   required BuildContext context,
   required String productCode,
@@ -94,8 +96,5 @@ class _UnitPriceEditDialogState extends State<_UnitPriceEditDialog> {
 }
 
 String _formatPriceInput(double value) {
-  if (value == value.roundToDouble()) {
-    return value.toStringAsFixed(0);
-  }
-  return value.toStringAsFixed(2);
+  return value.toTrimmedPriceString();
 }
