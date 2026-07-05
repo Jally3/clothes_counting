@@ -322,6 +322,57 @@ class DatabaseService {
     });
   }
 
+  Future<int> updateProductPricesByCodes({
+    required ProductType productType,
+    required List<String> productCodes,
+    required double price,
+  }) async {
+    final uniqueCodes = productCodes.toSet().toList();
+    if (uniqueCodes.isEmpty) return 0;
+
+    final db = await instance.database;
+    return db.transaction((txn) async {
+      final codePlaceholders = List.filled(uniqueCodes.length, '?').join(', ');
+      final products = await txn.query(
+        'products',
+        columns: ['id'],
+        where: 'productType = ? AND productCode IN ($codePlaceholders)',
+        whereArgs: [
+          productTypeDisplayNames[productType],
+          ...uniqueCodes,
+        ],
+      );
+      if (products.isEmpty) return 0;
+
+      final productIds = products
+          .map((row) => row['id'])
+          .whereType<int>()
+          .toList(growable: false);
+      final idPlaceholders = List.filled(productIds.length, '?').join(', ');
+      final now = DateTime.now().toIso8601String();
+
+      await txn.update(
+        'products',
+        {'price': price},
+        where: 'id IN ($idPlaceholders)',
+        whereArgs: productIds,
+      );
+
+      await txn.update(
+        'production_records',
+        {
+          'syncStatus': SyncStatus.pending.name,
+          'syncError': null,
+          'updatedAt': now,
+        },
+        where: 'productId IN ($idPlaceholders) AND deletedAt IS NULL',
+        whereArgs: productIds,
+      );
+
+      return productIds.length;
+    });
+  }
+
   Future<List<Product>> getAllProducts({bool activeOnly = true}) async {
     final db = await instance.database;
     final result = await db.query(

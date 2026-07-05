@@ -1,16 +1,26 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import '../extensions/double_extension.dart';
-import '../models/production_record_model.dart';
+import 'package:flutter/services.dart';
+
+import '../features/dashboard/dashboard_constants.dart';
+import '../features/dashboard/dashboard_formatters.dart';
+import '../features/dashboard/dashboard_models.dart';
+import '../features/dashboard/widgets/dashboard_empty_state.dart';
+import '../features/dashboard/widgets/dashboard_header_bar.dart';
+import '../features/dashboard/widgets/dashboard_loading_state.dart';
+import '../features/dashboard/widgets/dashboard_summary_card.dart';
+import '../features/dashboard/widgets/product_type_section.dart';
 import '../models/product_model.dart';
+import '../models/production_record_model.dart';
 import '../repositories/production_repository.dart';
-import '../utils/production_grouping.dart';
-import '../widgets/unit_price_edit_dialog.dart';
+import '../shared/dialogs/unit_price_edit_dialog.dart';
 import 'production_record_screen.dart';
 
 class DateDetailScreen extends StatefulWidget {
-  final DateTime selectedDate;
-
   const DateDetailScreen({super.key, required this.selectedDate});
+
+  final DateTime selectedDate;
 
   @override
   State<DateDetailScreen> createState() => _DateDetailScreenState();
@@ -18,10 +28,10 @@ class DateDetailScreen extends StatefulWidget {
 
 class _DateDetailScreenState extends State<DateDetailScreen> {
   final ProductionRepository _repository = ProductionRepository.instance;
-  List<ProductionRecord> _records = [];
-  Map<ProductType, List<ProductionRecord>> _groupedRecords = {};
   final Map<ProductType, bool> _expandedStates = {};
   final Map<String, bool> _productCodeExpandedStates = {};
+
+  List<ProductionRecord> _records = [];
   bool _isLoading = true;
 
   String get _shortDateTitle =>
@@ -41,10 +51,16 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
     );
   }
 
+  DashboardSummaryVm get _summary =>
+      DashboardViewModelBuilder.buildSummary(_records);
+
+  List<ProductTypeSectionVm> get _sections =>
+      DashboardViewModelBuilder.buildSections(_records);
+
   @override
   void initState() {
     super.initState();
-    _loadRecords();
+    unawaited(_loadRecords());
   }
 
   Future<void> _loadRecords() async {
@@ -56,12 +72,13 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
       final records =
           await _repository.getProductionRecordsByDate(widget.selectedDate);
       if (!mounted) return;
-      _groupRecordsByType(records);
+      setState(() {
+        _records = records;
+        _syncExpansionStates(_sections);
+      });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('加载记录失败: $e')),
-      );
+      _showSnackBar('加载记录失败: $e', backgroundColor: Colors.red);
     } finally {
       if (mounted) {
         setState(() {
@@ -71,14 +88,10 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
     }
   }
 
-  void _groupRecordsByType(List<ProductionRecord> records) {
-    _records = records;
-    _groupedRecords = groupRecordsByProductType(records);
-    for (final productType in _groupedRecords.keys) {
-      _expandedStates.putIfAbsent(productType, () => false);
+  void _syncExpansionStates(List<ProductTypeSectionVm> sections) {
+    for (final section in sections) {
+      _expandedStates.putIfAbsent(section.productType, () => false);
     }
-
-    setState(() {});
   }
 
   void _toggleExpanded(ProductType productType) {
@@ -87,11 +100,15 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
     });
   }
 
-  void _toggleProductCodeExpanded(String productCode) {
+  void _toggleProductCodeExpanded(String expansionKey) {
     setState(() {
-      _productCodeExpandedStates[productCode] =
-          !(_productCodeExpandedStates[productCode] ?? false);
+      _productCodeExpandedStates[expansionKey] =
+          !(_productCodeExpandedStates[expansionKey] ?? false);
     });
+  }
+
+  bool _isProductCodeExpanded(String expansionKey) {
+    return _productCodeExpandedStates[expansionKey] ?? false;
   }
 
   Future<void> _editProductCodePrice({
@@ -115,815 +132,337 @@ class _DateDetailScreenState extends State<DateDetailScreen> {
       if (!mounted) return;
       await _loadRecords();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('单价已更新'),
-          backgroundColor: Colors.green,
-        ),
+      _showSnackBar(
+        DashboardTexts.priceUpdated,
+        backgroundColor: DashboardColors.success,
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('单价更新失败：$e'),
-          backgroundColor: Colors.red,
-        ),
+      _showSnackBar('单价更新失败：$e', backgroundColor: Colors.red);
+    }
+  }
+
+  Future<void> _editProductTypePrices(ProductTypeSectionVm section) async {
+    final productCodes = section.codeGroups
+        .map((group) => group.productCode)
+        .toSet()
+        .toList(growable: false);
+    if (productCodes.isEmpty) return;
+
+    final productTypeName =
+        productTypeChDisplayNames[section.productType] ?? '其他';
+    final newPrice = await showBatchUnitPriceEditDialog(
+      context: context,
+      productTypeName: productTypeName,
+      productCodeCount: productCodes.length,
+    );
+    if (!mounted || newPrice == null) return;
+
+    try {
+      final updatedCount = await _repository.updateProductPrices(
+        productType: section.productType,
+        productCodes: productCodes,
+        price: newPrice,
       );
+      if (!mounted) return;
+      await _loadRecords();
+      if (!mounted) return;
+      _showSnackBar(
+        '已更新 $updatedCount 个编号单价',
+        backgroundColor: DashboardColors.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('批量更新单价失败：$e', backgroundColor: Colors.red);
     }
   }
 
-  Widget _buildRecordItem(ProductionRecord record) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue.shade100),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blue.withOpacity(0.08),
-            spreadRadius: 0,
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              '时间：${record.date.toString().substring(11, 16)}',
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Visibility(
-            visible: record.isRework,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.blue.shade50, Colors.blue.shade100],
-                ),
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: Colors.blue.shade200),
-              ),
-              child: const Text(
-                '返工',
-                style: TextStyle(
-                  color: Colors.black,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.blue.shade50, Colors.blue.shade100],
-              ),
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: Colors.blue.shade200),
-            ),
-            child: Text(
-              '数量: ${record.quantity}',
-              style: TextStyle(
-                color: Colors.blue.shade700,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
+  Future<void> _openCreateRecord({
+    String productCode = '',
+    ProductType productType = ProductType.clothes,
+  }) async {
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProductionRecordScreen(
+          productCode: productCode,
+          productType: productType,
+          initialDateTime: _initialRecordDateTime,
+        ),
       ),
     );
-  }
-
-  Widget _buildProductCodeGroup(String productCode,
-      List<ProductionRecord> records, ProductType productType) {
-    final isExpanded = _productCodeExpandedStates[productCode] ?? false;
-    final totalQuantity =
-        records.fold<int>(0, (sum, record) => sum + record.quantity);
-    final unitPrice = records.isEmpty ? 0.0 : records.first.unitPrice;
-    final totalPrice = totalQuantity * unitPrice;
-    final hasRemark = records.any((e) => e.isRework);
-
-    return Container(
-      margin: const EdgeInsets.only(left: 12, right: 12, bottom: 12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: LinearGradient(
-          colors: [Colors.indigo.shade50, Colors.blue.shade50],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        border: Border.all(color: Colors.indigo.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.indigo.withOpacity(0.1),
-            spreadRadius: 0,
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(16),
-              onTap: () => _toggleProductCodeExpanded(productCode),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.indigo.shade400,
-                            Colors.blue.shade400
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.indigo.withOpacity(0.3),
-                            spreadRadius: 0,
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.qr_code_rounded,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            productCode,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                              color: Colors.indigo.shade800,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.amber.shade100,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border:
-                                      Border.all(color: Colors.amber.shade300),
-                                ),
-                                child: Text(
-                                  '${records.length}条记录',
-                                  style: TextStyle(
-                                    color: Colors.amber.shade800,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Colors.green.shade400,
-                                      Colors.teal.shade400
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.green.withOpacity(0.3),
-                                      spreadRadius: 0,
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 1),
-                                    ),
-                                  ],
-                                ),
-                                child: Text(
-                                  '总量: $totalQuantity',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade50,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border:
-                                      Border.all(color: Colors.blue.shade200),
-                                ),
-                                child: Text(
-                                  '单价: ¥${_formatMoney(unitPrice)}',
-                                  style: TextStyle(
-                                    color: Colors.blue.shade700,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade100,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border:
-                                      Border.all(color: Colors.blue.shade300),
-                                ),
-                                child: Text(
-                                  '总价: ¥${_formatMoney(totalPrice)}',
-                                  style: TextStyle(
-                                    color: Colors.blue.shade800,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: '编辑单价',
-                      onPressed: () => _editProductCodePrice(
-                        productType: productType,
-                        productCode: productCode,
-                        currentPrice: unitPrice,
-                      ),
-                      icon: Icon(
-                        Icons.edit_note_rounded,
-                        color: Colors.indigo.shade600,
-                        size: 24,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.8),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        isExpanded
-                            ? Icons.keyboard_arrow_up_rounded
-                            : Icons.keyboard_arrow_down_rounded,
-                        color: Colors.indigo.shade600,
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Visibility(
-                      visible: hasRemark,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [Colors.blue.shade50, Colors.blue.shade100],
-                          ),
-                          borderRadius: BorderRadius.circular(15),
-                          border: Border.all(color: Colors.blue.shade200),
-                        ),
-                        child: const Text(
-                          '返工',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          if (isExpanded)
-            Container(
-              padding: const EdgeInsets.only(top: 0, bottom: 0),
-              child: Column(
-                children: records
-                    .map((record) => Padding(
-                          padding: const EdgeInsets.only(
-                              left: 8, right: 8, bottom: 8),
-                          child: _buildRecordItem(record),
-                        ))
-                    .toList(),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProductTypeSection(
-      ProductType productType, List<ProductionRecord> records) {
-    final isExpanded = _expandedStates[productType] ?? false;
-    final totalQuantity =
-        records.fold<int>(0, (sum, record) => sum + record.quantity);
-
-    final recordsByCode = groupRecordsByProductCode(records);
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: LinearGradient(
-          colors: [Colors.white, Colors.blue.shade50],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        border: Border.all(
-          color: Colors.blue.shade200,
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blue.withOpacity(0.15),
-            spreadRadius: 0,
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: () => _toggleExpanded(productType),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.blue.shade500,
-                            Colors.indigo.shade500
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.blue.withOpacity(0.4),
-                            spreadRadius: 0,
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        _getProductTypeIcon(productType),
-                        color: Colors.white,
-                        size: 26,
-                      ),
-                    ),
-                    const SizedBox(width: 18),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            productTypeChDisplayNames[productType] ?? '其他',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 20,
-                              color: Colors.blue.shade800,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            runSpacing: 10,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.purple.shade100,
-                                  borderRadius: BorderRadius.circular(15),
-                                  border:
-                                      Border.all(color: Colors.purple.shade300),
-                                ),
-                                child: Text(
-                                  '${recordsByCode.length}个编号',
-                                  style: TextStyle(
-                                    color: Colors.purple.shade700,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange.shade100,
-                                  borderRadius: BorderRadius.circular(15),
-                                  border:
-                                      Border.all(color: Colors.orange.shade300),
-                                ),
-                                child: Text(
-                                  '${records.length}条记录',
-                                  style: TextStyle(
-                                    color: Colors.orange.shade700,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Colors.green.shade500,
-                                      Colors.teal.shade500
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(15),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.green.withOpacity(0.3),
-                                      spreadRadius: 0,
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: Text(
-                                  '总量: $totalQuantity',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.9),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        isExpanded
-                            ? Icons.keyboard_arrow_up_rounded
-                            : Icons.keyboard_arrow_down_rounded,
-                        color: Colors.blue.shade600,
-                        size: 28,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          if (isExpanded)
-            Container(
-              padding: const EdgeInsets.only(top: 0, bottom: 0),
-              child: Column(
-                children: recordsByCode.entries
-                    .map((entry) => _buildProductCodeGroup(
-                        entry.key, entry.value, productType))
-                    .toList(),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  IconData _getProductTypeIcon(ProductType productType) {
-    switch (productType) {
-      case ProductType.clothes:
-        return Icons.checkroom_rounded;
-      case ProductType.pants:
-        return Icons.dry_cleaning_rounded;
-      case ProductType.hat:
-        return Icons.local_laundry_service_rounded;
-      case ProductType.dress:
-        return Icons.woman_rounded;
-
-      case ProductType.unknown:
-        return Icons.category_rounded;
+    if (!mounted) return;
+    if (changed == true || changed == null) {
+      await _loadRecords();
     }
   }
 
-  String _formatMoney(double value) {
-    return value.toTrimmedPriceString();
+  void _showDeleteConfirmDialog(ProductionRecord record) {
+    showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text(DashboardTexts.confirmDelete),
+          content: Text(
+            '确定要删除这条生产记录吗？\n\n时间：${DashboardFormatters.dateTime(record.date)}\n数量：${record.quantity}',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text(DashboardTexts.cancel),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                unawaited(_deleteRecord(record));
+              },
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text(DashboardTexts.delete),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteRecord(ProductionRecord record) async {
+    try {
+      final recordId = record.id;
+      if (recordId == null) {
+        _showSnackBar(
+          DashboardTexts.recordUnsaved,
+          backgroundColor: Colors.red,
+        );
+        return;
+      }
+
+      final success = await _repository.deleteRecord(recordId);
+      if (!mounted) return;
+      if (success) {
+        await _loadRecords();
+        if (!mounted) return;
+        _showSnackBar(
+          DashboardTexts.deleteSuccess,
+          backgroundColor: DashboardColors.success,
+        );
+      } else {
+        _showSnackBar(
+          DashboardTexts.deleteFailed,
+          backgroundColor: Colors.red,
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('删除出错：$e', backgroundColor: Colors.red);
+    }
+  }
+
+  void _showSnackBar(
+    String message, {
+    Color? backgroundColor,
+  }) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: backgroundColor,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final sections = _sections;
+
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.blue.shade800,
-        title: Text(
-          _shortDateTitle,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.blue.shade800,
-          ),
-        ),
-        leading: Container(
-          margin: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.9),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: IconButton(
-            icon: Icon(Icons.arrow_back_rounded, color: Colors.blue.shade700),
-            onPressed: () => Navigator.pop(context),
-          ),
+      backgroundColor: DashboardColors.background,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openCreateRecord(),
+        backgroundColor: DashboardColors.primary,
+        foregroundColor: Colors.white,
+        elevation: 8,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        icon: const Icon(Icons.add_rounded, size: 26),
+        label: const Text(
+          DashboardTexts.addRecord,
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: LinearGradient(
-                colors: [Colors.blue.shade500, Colors.indigo.shade600],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+          const DashboardHeaderBackground(),
+          SafeArea(
+            child: RefreshIndicator(
+              onRefresh: _loadRecords,
+              color: DashboardColors.primary,
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        DashboardDimens.headerHorizontalPadding,
+                        12,
+                        DashboardDimens.headerHorizontalPadding,
+                        0,
+                      ),
+                      child: _DateDetailHeaderBar(
+                        title: _shortDateTitle,
+                        onBack: () => Navigator.of(context).maybePop(),
+                        onRefresh: _loadRecords,
+                      ),
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        DashboardDimens.contentHorizontalPadding,
+                        22,
+                        DashboardDimens.contentHorizontalPadding,
+                        0,
+                      ),
+                      child: DashboardSummaryCard(
+                        title: '日期概览',
+                        periodValue: _fullDateText,
+                        summary: _summary,
+                        quantityLabel: '当日总数量',
+                        priceLabel: '当日总价',
+                      ),
+                    ),
+                  ),
+                  if (_isLoading)
+                    const SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: DashboardLoadingState(text: '正在加载数据...'),
+                    )
+                  else if (sections.isEmpty)
+                    const SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: DashboardEmptyState(text: '该日期暂无记录'),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(
+                        DashboardDimens.contentHorizontalPadding,
+                        12,
+                        DashboardDimens.contentHorizontalPadding,
+                        DashboardDimens.listBottomPadding,
+                      ),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final section = sections[index];
+                            return ProductTypeSection(
+                              section: section,
+                              isExpanded:
+                                  _expandedStates[section.productType] ?? false,
+                              onToggle: () =>
+                                  _toggleExpanded(section.productType),
+                              isCodeExpanded: _isProductCodeExpanded,
+                              onToggleCode: _toggleProductCodeExpanded,
+                              onEditPrice: (
+                                productType,
+                                productCode,
+                                currentPrice,
+                              ) =>
+                                  _editProductCodePrice(
+                                productType: productType,
+                                productCode: productCode,
+                                currentPrice: currentPrice,
+                              ),
+                              onBatchEditPrice: () =>
+                                  _editProductTypePrices(section),
+                              onAddRecord: (
+                                productCode,
+                                productType,
+                              ) =>
+                                  _openCreateRecord(
+                                productCode: productCode,
+                                productType: productType,
+                              ),
+                              onDeleteRecord: _showDeleteConfirmDialog,
+                            );
+                          },
+                          childCount: sections.length,
+                        ),
+                      ),
+                    ),
+                ],
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.blue.withOpacity(0.3),
-                  spreadRadius: 0,
-                  blurRadius: 15,
-                  offset: const Offset(0, 5),
-                ),
-              ],
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(
-                        Icons.calendar_today_rounded,
-                        color: Colors.white,
-                        size: 28,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          '日期概览',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          _fullDateText,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 14,
-                            color: Colors.white.withOpacity(0.82),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Colors.green.shade500, Colors.teal.shade500],
-                        ),
-                        borderRadius: BorderRadius.circular(25),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.green.withOpacity(0.4),
-                            spreadRadius: 0,
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.production_quantity_limits_rounded,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '总数量: ${_records.fold<int>(0, (sum, record) => sum + record.quantity)}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: _isLoading
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.blue.withOpacity(0.1),
-                                spreadRadius: 0,
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.blue.shade500),
-                            strokeWidth: 3,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        Text(
-                          '正在加载数据...',
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : _groupedRecords.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(20),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.grey.withOpacity(0.1),
-                                    spreadRadius: 0,
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: Icon(
-                                Icons.inbox_outlined,
-                                size: 80,
-                                color: Colors.blue.shade300,
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-                            Text(
-                              '该日期暂无记录',
-                              style: TextStyle(
-                                fontSize: 20,
-                                color: Colors.grey.shade700,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView(
-                        padding: const EdgeInsets.only(bottom: 100),
-                        children: _groupedRecords.entries
-                            .map((entry) => _buildProductTypeSection(
-                                entry.key, entry.value))
-                            .toList(),
-                      ),
           ),
         ],
       ),
-      floatingActionButton: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.blue.withOpacity(0.3),
-              spreadRadius: 0,
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+    );
+  }
+}
+
+class _DateDetailHeaderBar extends StatelessWidget {
+  const _DateDetailHeaderBar({
+    required this.title,
+    required this.onBack,
+    required this.onRefresh,
+  });
+
+  final String title;
+  final VoidCallback onBack;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: DashboardColors.primary,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+      ),
+      child: SizedBox(
+        height: 36,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            IconButton(
+              tooltip: '返回',
+              onPressed: onBack,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(
+                minWidth: 40,
+                minHeight: 40,
+              ),
+              icon: const Icon(
+                Icons.chevron_left_rounded,
+                color: Colors.white,
+                size: 34,
+              ),
             ),
-          ],
-        ),
-        child: FloatingActionButton.extended(
-          onPressed: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ProductionRecordScreen(
-                  initialDateTime: _initialRecordDateTime,
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  height: 1.0,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-            );
-            if (mounted) {
-              _loadRecords();
-            }
-          },
-          icon: const Icon(Icons.add_rounded, size: 24),
-          label: const Text(
-            '添加记录',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
             ),
-          ),
-          backgroundColor: Colors.blue.shade600,
-          foregroundColor: Colors.white,
-          elevation: 0,
+            IconButton(
+              tooltip: DashboardTexts.refresh,
+              onPressed: onRefresh,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(
+                minWidth: 40,
+                minHeight: 40,
+              ),
+              icon: const Icon(
+                Icons.refresh_rounded,
+                color: Colors.white,
+                size: 26,
+              ),
+            ),
+          ],
         ),
       ),
     );

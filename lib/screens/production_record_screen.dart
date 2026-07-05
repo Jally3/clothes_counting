@@ -34,13 +34,13 @@ class _ProductionRecordScreenState extends State<ProductionRecordScreen> {
 
   @override
   void initState() {
+    super.initState();
     if (widget.productCode.isNotEmpty) {
       _productCodeController.text = widget.productCode;
     }
     _selectedProductType = widget.productType;
     _selectedDateTime = widget.initialDateTime ?? DateTime.now();
-    super.initState();
-    _loadExistingProductPrice();
+    _loadUnitPriceForCurrentProduct();
   }
 
   @override
@@ -60,6 +60,32 @@ class _ProductionRecordScreenState extends State<ProductionRecordScreen> {
     if (!mounted || product == null || product.price <= 0) return;
 
     _unitPriceController.text = _formatPriceInput(product.price);
+  }
+
+  Future<void> _loadUnitPriceForCurrentProduct() async {
+    _applyDefaultUnitPrice();
+    await _loadExistingProductPrice();
+  }
+
+  void _applyDefaultUnitPrice() {
+    final defaultPrice = _defaultUnitPriceFor(_selectedProductType);
+    _unitPriceController.text =
+        defaultPrice == null ? '' : _formatPriceInput(defaultPrice);
+  }
+
+  double? _defaultUnitPriceFor(ProductType productType) {
+    switch (productType) {
+      case ProductType.clothes:
+        return 0.3;
+      case ProductType.pants:
+        return 0.2;
+      case ProductType.hat:
+        return 0.1;
+      case ProductType.dress:
+        return 0.3;
+      case ProductType.unknown:
+        return null;
+    }
   }
 
   String _formatPriceInput(double value) {
@@ -189,6 +215,7 @@ class _ProductionRecordScreenState extends State<ProductionRecordScreen> {
                         if (newValue == null) return;
                         setState(() {
                           _selectedProductType = newValue;
+                          _applyDefaultUnitPrice();
                         });
                         _loadExistingProductPrice();
                       },
@@ -205,7 +232,7 @@ class _ProductionRecordScreenState extends State<ProductionRecordScreen> {
                         }
                         return null;
                       },
-                      onEditingComplete: _loadExistingProductPrice,
+                      onEditingComplete: _loadUnitPriceForCurrentProduct,
                     ),
                     const SizedBox(height: 16),
                     _RecordTextField(

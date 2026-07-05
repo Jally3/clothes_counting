@@ -84,4 +84,20 @@ class ProductionRepository {
     );
     unawaited(_syncService.syncPendingRecords());
   }
+
+  Future<int> updateProductPrices({
+    required ProductType productType,
+    required List<String> productCodes,
+    required double price,
+  }) async {
+    final updatedCount = await _databaseService.updateProductPricesByCodes(
+      productType: productType,
+      productCodes: productCodes,
+      price: price,
+    );
+    if (updatedCount > 0) {
+      unawaited(_syncService.syncPendingRecords());
+    }
+    return updatedCount;
+  }
 }
